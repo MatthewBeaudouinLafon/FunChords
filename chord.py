@@ -9,7 +9,7 @@ class ScaleNote(object):
     def __init__(self, note):
         if type(note) is int:
             assert note > 0, "ScaleNote input is 1-indexed; {} out of range".format(note)
-            self._note = note - 1 #% (self.MAX_SCALE_NOTE + 1)
+            self._note = note - 1
             self._accidental = 0
             return
 
@@ -33,7 +33,7 @@ class ScaleNote(object):
 
     def __add__(self, other):
         if type(other) is int:
-            new_note = (self._note + other) #% (self.MAX_SCALE_NOTE + 1)
+            new_note = (self._note + other)
             return ScaleNote(str(new_note) + self.accidental_str())
         elif type(other) is ScaleNote:
             new_note = self._note + other._note
@@ -46,8 +46,6 @@ class ScaleNote(object):
                 new_accidental = 0
                 new_note -= 1
 
-            # new_note %= (self.MAX_SCALE_NOTE + 1)
-
             return ScaleNote(self.accidental_to_str(new_accidental) + str(new_note + 1))
         else:
             raise TypeError("unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other)))
@@ -55,6 +53,10 @@ class ScaleNote(object):
     def __repr__(self):
         # NOTE: root degree is 1, so notes are 1-indexed for reading (but 0-indexed internally)
         return "Scale Note({})".format(self.accidental_str() + str(self._note + 1))
+
+    def __eq__(self, other):
+        # TODO: invert note into octave, check for #x == b(x+1).
+        pass
 
     def in_octave(self):
         """
@@ -94,6 +96,10 @@ class FunChord(object):
         self._degree = ScaleNote(degree)  # scale degree of the chord's root note
         self._extensions = [ScaleNote(note) for note in extensions]
         self._octave = octave
+
+    def __eq__(self, other):
+        # TODO: invert extensions into octave, compare notes in 12 tones.
+        pass
 
     def triad_notes(self):
         """
