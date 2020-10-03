@@ -58,6 +58,9 @@ class ScaleNote(object):
         # TODO: invert note into octave, check for #x == b(x+1).
         pass
 
+    def is_root(self):
+        return self._note == 0
+
     def in_octave(self):
         """
         Return note within an octave ie. inverted to 0-7.
@@ -100,6 +103,9 @@ class FunChord(object):
     def __eq__(self, other):
         # TODO: invert extensions into octave, compare notes in 12 tones.
         pass
+
+    def is_root(self):
+        return self._degree.is_root()
 
     def triad_notes(self):
         """

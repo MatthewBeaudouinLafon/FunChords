@@ -2,8 +2,10 @@ import push2_python
 import time
 import mido
 import push2_python.constants
-import chord
+from fun_chord import FunChord
+from fun_pad import ChordPad
 import note_util
+import numpy as np
 
 class FunChordApp(object):
     """
@@ -20,15 +22,36 @@ class FunChordApp(object):
         self.running = False
 
         # Harmony
-        self.active_scale = note_util.RELATIVE_KEY_DICT['maj']
+        self.active_scale_name = 'Cmaj'
         self.active_chord = None
         self.note_ons = set()  # dict of note-ons sent.
+
+        # Model
+        self.pads = np.array([
+            np.array([None] * 8),
+            np.array([None] * 8),
+            np.array([None] * 8),
+            np.array([None] * 8),
+            np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
+            np.array([None] * 8),
+            np.array([None] * 8),
+            np.array([None] * 8),
+        ])
+
+        # Set all pads to their default color
+        # TODO: Make this part of the init for Pad?
+        for i in range(8):
+            for j in range(8):
+                pad = self.pads[i][j]
+                if pad:
+                    self.push.pads.set_pad_color((i,j), color=pad.default_color())
+                else:
+                    self.push.pads.set_pad_color((i,j), color='black')
 
     def init_push(self):
         push = push2_python.Push2(use_user_midi_port=True)
         
         # Start by setting all pad colors to white
-        push.pads.set_all_pads_to_color('white')
         push.buttons.set_button_color(push2_python.constants.BUTTON_STOP)
         push.buttons.set_button_color(push2_python.constants.BUTTON_NEW)
         return push
@@ -54,6 +77,7 @@ class FunChordApp(object):
     def run_loop(self):
         print("Starting FunChord...")
         self.running = True
+
         try:
             while self.running:
                 # TODO: retry connection to push if possible, and reset starting colors
@@ -67,33 +91,6 @@ class FunChordApp(object):
         self.send_note_offs()
         self.push.f_stop.set()
         self.midi_out_port.close()
-
-def note_to_number(name):
-    """
-    Convert nome formed as (note, accidental, octave) to midi note number.
-    eg. C#2 -> 49
-    """
-    letter_to_number = {
-        "C": 0,
-        "D": 2,
-        "E": 4,
-        "F": 5,
-        "G": 7,
-        "A": 9,
-        "B": 11,
-    }
-
-    note, octave = name[:-1], int(name[-1])
-    note_val = letter_to_number[note[0]]
-    if len(note) == 2:
-        accidental = note[-1]
-        if accidental == "#":
-            note_val += 1
-        elif accidental == "b":
-            note_val -= 1
-        
-    octave_offset = (octave + 2) * 12  # NOTE: octave starts at -2
-    return note_val + octave_offset
 
 @push2_python.on_button_pressed()
 def on_button_pressed(_, button_name):
@@ -117,17 +114,32 @@ def on_button_released(_, button_name):
 
 @push2_python.on_pad_pressed()
 def on_pad_pressed(_, pad_n, pad_ij, velocity):
-    # Set pressed pad color to green
-    app.push.pads.set_pad_color(pad_ij, 'green')
-    app.active_chord = chord.FunChord('Cmaj', 1)
-    app.play_active_chord(velocity)
+    should_replay_chord = False
+
+    pad = app.pads[pad_ij[0]][pad_ij[1]]
+    if pad:
+        pad.on_press(app.push)
+        if pad.get_chord() is not None:
+            app.active_chord = pad.get_chord()
+            should_replay_chord = True
+    
+    if should_replay_chord:
+        app.play_active_chord(velocity)
 
 
 @push2_python.on_pad_released()
 def on_pad_released(_, pad_n, pad_ij, velocity):
-    # Set released pad color back to white
-    app.push.pads.set_pad_color(pad_ij, 'white')
-    app.send_note_offs()
+    should_release_notes = False
+    pad = app.pads[pad_ij[0]][pad_ij[1]]
+    if pad:
+        pad.on_release(app.push)
+        if pad.get_chord() is not None:
+            # TODO: this acts dumb if two chord pads are active, probably the wrong architecture.
+            app.active_chord = pad.get_chord()
+            should_release_notes = True
+
+    if should_release_notes:
+        app.send_note_offs()
 
 if __name__ == "__main__":
     app = FunChordApp()
