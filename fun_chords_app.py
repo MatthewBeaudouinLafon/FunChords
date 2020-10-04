@@ -8,6 +8,7 @@ from chord_mod import Sus2, Sus4
 import note_util
 import numpy as np
 
+# TODO: Revisit voicing stuff
 class FunChordApp(object):
     """
     App handles midi connection, interface with midi and push2.
@@ -25,7 +26,8 @@ class FunChordApp(object):
         # Harmony
         self.active_scale_name = 'Cmaj'
         self.active_chord = None
-        self.octave = 1
+        self.octave = 3
+        self.voicing_center = 0  # scale note that the chord voicing will move towards
         self.modifiers = []
         self.note_ons = set()  # set of note-ons sent.
 
@@ -59,6 +61,22 @@ class FunChordApp(object):
         push.buttons.set_button_color(push2_python.constants.BUTTON_NEW)
         return push
 
+    def cg_voicing(self, tone, voicing_center):
+        """
+        Returns how many octaves up or down this note should be.
+
+        tone (int): in scale tone (0 is root)
+        """
+        bottom = max(0, voicing_center - 5)
+        top = min(11, voicing_center + 6)
+        # TODO: this doesn't handle extensions well, they sometimes need to be inverted twice down.
+        if tone < bottom:
+            return 1
+        elif tone > top:
+            return -1
+        else:
+            return 0
+
     def play_active_chord(self, velocity):
         """
         Sends the midi message for the active chord. Use this after changing the active chord.
@@ -72,10 +90,13 @@ class FunChordApp(object):
             chord = mod(chord)
 
         self.send_note_offs()
-        for note in chord.midi_notes(self.octave):
-            msg = mido.Message('note_on', note=note, velocity=velocity)
+        tones = chord.tones()
+        for idx, midi_note in enumerate(chord.midi_notes(self.octave)):
+            voicing_diff = 12 * self.cg_voicing(tones[idx], self.voicing_center)
+            midi_note = midi_note + voicing_diff
+            msg = mido.Message('note_on', note=midi_note, velocity=velocity)
             self.midi_out_port.send(msg)
-            self.note_ons.add(note)
+            self.note_ons.add(midi_note)
 
     def send_note_offs(self):
         for note in list(self.note_ons):

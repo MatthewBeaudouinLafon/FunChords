@@ -60,7 +60,6 @@ def sus4(chord: FunChord) -> FunChord:
     return FunChord(
         chord.get_scale_name(),
         chord.root_degree().get_name(),
-        octave=chord._octave,
         additions=new_additions,
         omissions=new_omissions)
 
