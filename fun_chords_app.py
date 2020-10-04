@@ -115,6 +115,7 @@ class FunChordApp(object):
         try:
             while self.running:
                 # TODO: retry connection to push if possible, and reset starting colors
+                time.sleep(0.1)
                 pass
         except KeyboardInterrupt:
             self.end_app()
@@ -123,6 +124,7 @@ class FunChordApp(object):
         print("\nStopping FunChord...")
         # TODO: clear push ui
         self.send_note_offs()
+        self.push.pads.set_all_pads_to_black()
         self.push.f_stop.set()
         self.midi_out_port.close()
 
