@@ -3,7 +3,8 @@ import time
 import mido
 import push2_python.constants
 from fun_chord import FunChord
-from fun_pad import ChordPad
+from fun_pad import ChordPad, ModPad
+from chord_mod import Sus2, Sus4
 import note_util
 import numpy as np
 
@@ -24,7 +25,9 @@ class FunChordApp(object):
         # Harmony
         self.active_scale_name = 'Cmaj'
         self.active_chord = None
-        self.note_ons = set()  # dict of note-ons sent.
+        self.octave = 1
+        self.modifiers = []
+        self.note_ons = set()  # set of note-ons sent.
 
         # Model
         self.pads = np.array([
@@ -34,8 +37,8 @@ class FunChordApp(object):
             np.array([None] * 8),
             np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
             np.array([None] * 8),
-            np.array([None] * 8),
-            np.array([None] * 8),
+            np.array([ModPad((6, 0), Sus4)] + [None] * 7),
+            np.array([ModPad((7, 0), Sus2)] + [None] * 7),
         ])
 
         # Set all pads to their default color
@@ -60,7 +63,16 @@ class FunChordApp(object):
         """
         Sends the midi message for the active chord. Use this after changing the active chord.
         """
-        for note in self.active_chord.midi_notes():
+        chord = self.active_chord
+
+        if chord is None:
+            return
+
+        for mod in self.modifiers:
+            chord = mod(chord)
+
+        self.send_note_offs()
+        for note in chord.midi_notes(self.octave):
             msg = mido.Message('note_on', note=note, velocity=velocity)
             self.midi_out_port.send(msg)
             self.note_ons.add(note)
@@ -86,7 +98,7 @@ class FunChordApp(object):
             self.end_app()
 
     def end_app(self):
-        print("Stopping FunChord...")
+        print("\nStopping FunChord...")
         # TODO: clear push ui
         self.send_note_offs()
         self.push.f_stop.set()
@@ -112,6 +124,7 @@ def on_button_released(_, button_name):
     else:
         app.push.buttons.set_button_color(button_name, 'black')
 
+# TODO: content of the pad callbacks should be in the app
 @push2_python.on_pad_pressed()
 def on_pad_pressed(_, pad_n, pad_ij, velocity):
     should_replay_chord = False
@@ -122,7 +135,12 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
         if pad.get_chord() is not None:
             app.active_chord = pad.get_chord()
             should_replay_chord = True
-    
+
+        mod = pad.get_modifier()
+        if mod is not None and mod not in app.modifiers:
+            app.modifiers.append(mod)
+            should_replay_chord = True
+
     if should_replay_chord:
         app.play_active_chord(velocity)
 
@@ -130,16 +148,25 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
 @push2_python.on_pad_released()
 def on_pad_released(_, pad_n, pad_ij, velocity):
     should_release_notes = False
+    modifier_changed = False
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
         pad.on_release(app.push)
         if pad.get_chord() is not None:
-            # TODO: this acts dumb if two chord pads are active, probably the wrong architecture.
-            app.active_chord = pad.get_chord()
+            # TODO: this acts dumb if two chord pads are active, need to rethink this.
+            app.active_chord = None
             should_release_notes = True
+
+        mod = pad.get_modifier()
+        if mod is not None and mod in app.modifiers:
+            app.modifiers.remove(mod)
+            modifier_changed = True
 
     if should_release_notes:
         app.send_note_offs()
+    elif modifier_changed:
+        # replay the chord if the modifier changed
+        app.play_active_chord(velocity)
 
 if __name__ == "__main__":
     app = FunChordApp()

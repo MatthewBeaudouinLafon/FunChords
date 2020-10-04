@@ -52,13 +52,35 @@ class ScaleNote(object):
 
     def __repr__(self):
         # NOTE: root degree is 1, so notes are 1-indexed for reading (but 0-indexed internally)
-        return "Scale Note({})".format(self.accidental_str() + str(self._note + 1))
+        return "Scale Note({})".format(self.get_name())
 
-    def __eq__(self, other):
-        # TODO: invert note into octave, check for #x == b(x+1).
-        pass
+    def __eq__(self, other) -> bool:
+        if type(other) in (int, str):
+            other = ScaleNote(other)
+        elif type(other) != ScaleNote:
+            raise TypeError
+        # TODO: Handle sharps and flats note equality, including E#==F
+        # # Handle C# == Db
+        # if abs(self._note - other._note) == 1:
+        #     smaller_note = self
+        #     bigger_note = other
 
-    def is_root(self):
+        #     if self._note > other._note:
+        #         smaller_note = other
+        #         bigger_note = self
+
+        #     if smaller_note.accidental_str == '#' and bigger_note.accidental_str == 'b':
+        #         return True
+        return self._note == other._note and self._accidental == other._accidental
+
+    def __hash__(self) -> int:
+        # shitty hash but should work
+        return self._accidental * 100 + self._note
+
+    def get_name(self) -> str:
+        return self.accidental_str() + str(self._note + 1)
+
+    def is_root(self) -> bool:
         return self._note == 0
 
     def in_octave(self):
@@ -67,11 +89,14 @@ class ScaleNote(object):
         """
         return self._note % (self.MAX_SCALE_NOTE + 1)
 
+    def in_octave_scale_note(self):
+        return ScaleNote(self.accidental_str() + str(1 + self.in_octave()))
+
     def accidental_str(self):
         return self.accidental_to_str(self._accidental)
 
     @staticmethod
-    def accidental_to_str(accidental):
+    def accidental_to_str(accidental: int) -> str:
         if accidental == -1:
             return 'b'
         elif accidental == 0:
@@ -79,16 +104,20 @@ class ScaleNote(object):
         elif accidental == 1:
             return '#'
 
+
 class FunChord(object):
     """
     Chord function in a scale
     """
-    def __init__(self, scale_name, degree, octave=1, extensions=[]):
+    def __init__(self, scale_name, degree, additions=[], omissions=[]):
         """
         scale_name (str): Name of the scale eg. Cmin, G#maj, etc.
         degree (int): scale degree of the chord's root note (root at 1)
+        octave (int): Octave to play at
+        omissions ([str|int]): Note to remove from the chord, relative to the chord eg. [1, '5']
+        additions ([str|int]): Notes to add to the chord (such as extensions) relative to the chord eg. [2, 7, 'b13']
         """
-        assert len(scale_name) >= 4, "Scale name {} should be formatted as (note letter)(accidental)(min|maj)"
+        assert len(scale_name) >= 4, "Scale name '{}' should be formatted as (note letter)(accidental)(min|maj)".format(scale_name)
 
         # Take scale appart
         quality = scale_name[-3:]  # "min"|"maj"
@@ -96,29 +125,53 @@ class FunChord(object):
         
         self._scale_root = note  # scale root note name
         self._scale = note_util.RELATIVE_KEY_DICT[quality]  # 7-note scale
+        self.scale_quality = quality
         self._degree = ScaleNote(degree)  # scale degree of the chord's root note
-        self._extensions = [ScaleNote(note) for note in extensions]
-        self._octave = octave
+        self._additions = set([ScaleNote(note) for note in additions])
+        self._omissions = set([ScaleNote(note) for note in omissions])
 
     def __eq__(self, other):
-        # TODO: invert extensions into octave, compare notes in 12 tones.
+        # TODO: invert additions into octave, compare notes in 12 tones.
         pass
+
+    def copy_additions(self):
+        return self._additions.copy()
+
+    def copy_omissions(self):
+        return self._omissions.copy()
+
+    def get_scale_name(self):
+        return self._scale_root + self.scale_quality
 
     def is_root(self):
         return self._degree.is_root()
+
+    def root_degree(self):
+        return self._degree.in_octave_scale_note()
 
     def triad_notes(self):
         """
         Returns first three notes of the chord.
         """
         # NOTE: note inputs are 1-indexed
-        return [ScaleNote(1 + (2 * n)) for n in range(0,3)]
+        triad = [ScaleNote(1 + (2 * n)) for n in range(0,3)]
+        for omission in self._omissions:
+            omitted_note = omission
+            if omitted_note in triad:
+                triad.remove(omitted_note)
+        return triad
 
     def scale_notes(self):
         """
         Returns the notes in scale used.
         """
-        chord_notes = self.triad_notes() + self._extensions
+        chord_notes = self.triad_notes() + list(self._additions)
+        
+        for omission in self._omissions:
+            omitted_note = omission
+            if omitted_note in chord_notes:
+                chord_notes.remove(omitted_note)
+
         scale_notes = [(self._degree + scale_note) for scale_note in chord_notes]
         return scale_notes
 
@@ -136,11 +189,11 @@ class FunChord(object):
             tones.append(tone)
         return tones
 
-    def midi_notes(self):
+    def midi_notes(self, octave):
         """
         Return list of midi notes.
         """
-        scale_root_midi_name = str(self._scale_root) + str(self._octave)
+        scale_root_midi_name = str(self._scale_root) + str(octave)
         root_midi = note_util.name_to_midi(scale_root_midi_name)
         return [root_midi + tone for tone in self.tones()]
 
@@ -149,10 +202,10 @@ if __name__ == "__main__":
     extensions = ['7', "13"]
     
     # ScaleNote(1), ScaleNote(3), ScaleNote(5), ScaleNote(7)
-    print("Cmaj scale notes", FunChord(scale, 1, extensions=extensions).scale_notes())
+    print("Cmaj scale notes", FunChord(scale, 1, additions=extensions).scale_notes())
 
     # tones = [0, 4, 7, 11]
-    print("Cmaj tones", FunChord(scale, 1, extensions=extensions).tones())
+    print("Cmaj tones", FunChord(scale, 1, additions=extensions).tones())
 
     # midi = [36, 40, 43, 47]
-    print("Cmaj midi notes", FunChord(scale, 1, extensions=extensions).midi_notes())
+    print("Cmaj midi notes", FunChord(scale, 1, additions=extensions).midi_notes(1))
