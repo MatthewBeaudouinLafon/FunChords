@@ -30,6 +30,7 @@ class FunChordApp(object):
         self.voicing_center = 0  # scale note that the chord voicing will move towards
         self.modifiers = []
         self.note_ons = set()  # set of note-ons sent.
+        self.previous_velocity = 64
 
         # Model
         self.pads = np.array([
@@ -89,7 +90,7 @@ class FunChordApp(object):
         for mod in self.modifiers:
             chord = mod(chord)
 
-        self.send_note_offs()
+        # self.send_note_offs()
         tones = chord.tones()
         for idx, midi_note in enumerate(chord.midi_notes(self.octave)):
             voicing_diff = 12 * self.cg_voicing(tones[idx], self.voicing_center)
@@ -148,21 +149,22 @@ def on_button_released(_, button_name):
 # TODO: content of the pad callbacks should be in the app
 @push2_python.on_pad_pressed()
 def on_pad_pressed(_, pad_n, pad_ij, velocity):
-    should_replay_chord = False
+    should_play_chord = False
 
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
         pad.on_press(app.push)
         if pad.get_chord() is not None:
             app.active_chord = pad.get_chord()
-            should_replay_chord = True
+            should_play_chord = True
 
         mod = pad.get_modifier()
         if mod is not None and mod not in app.modifiers:
             app.modifiers.append(mod)
-            should_replay_chord = True
+            should_play_chord = True
 
-    if should_replay_chord:
+    if should_play_chord:
+        app.previous_velocity = velocity
         app.play_active_chord(velocity)
 
 
@@ -187,7 +189,7 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
         app.send_note_offs()
     elif modifier_changed:
         # replay the chord if the modifier changed
-        app.play_active_chord(velocity)
+        app.play_active_chord(app.previous_velocity)
 
 if __name__ == "__main__":
     app = FunChordApp()
