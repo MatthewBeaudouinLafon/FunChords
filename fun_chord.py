@@ -7,6 +7,11 @@ class ScaleNote(object):
     # TODO: re-evaluate 0 vs 1 indexing for scale degrees
     MAX_SCALE_NOTE = 7
     def __init__(self, note):
+        if type(note) is ScaleNote:
+            self._note = note._note
+            self._accidental = note._accidental
+            return
+
         if type(note) is int:
             assert note > 0, "ScaleNote input is 1-indexed; {} out of range".format(note)
             self._note = note - 1
@@ -29,6 +34,7 @@ class ScaleNote(object):
             self._accidental = 1 if note[0] == "#" else -1
             return
 
+        print("Note type is {} instead of int or str".format(type(note)))
         raise TypeError
 
     def __add__(self, other):

@@ -3,7 +3,7 @@ This file contains all of the chord modifier functions. Each modifier takes a Fu
 a new FunChord. There's also colors for modifiers/groups of modifiers in here.
 """
 
-from typing import Callable
+from typing import Callable, List
 from fun_chord import FunChord, ScaleNote
 
 mod_color_map = {}  # FunMod -> 'color'
@@ -42,7 +42,6 @@ def sus2(chord: FunChord) -> FunChord:
     return FunChord(
         chord.get_scale_name(),
         chord.root_degree().get_name(),
-        octave=chord._octave,
         additions=new_additions,
         omissions=new_omissions)
 
@@ -69,3 +68,75 @@ Sus4 = FunMod('Sus4', sus4)
 sus_color = 'purple'
 mod_color_map[Sus2] = sus_color
 mod_color_map[Sus4] = sus_color
+
+
+# Alternate Triad
+def are_tones_major_triad(tones: List[int]) -> bool:
+    root = tones[0]
+    third_interval = tones[1] - root
+    return third_interval == 4
+
+def are_tones_minor_triad(tones: List[int]) -> bool:
+    root = tones[0]
+    third_interval = tones[1] - root
+    return third_interval == 3
+
+def diminished(chord: FunChord) -> FunChord:
+    pass
+
+def augmented(chord: FunChord) -> FunChord:
+    pass
+
+def parallel(chord: FunChord) -> FunChord:
+    new_additions = chord.copy_additions()
+    new_omissions = chord.copy_omissions()
+
+    tones = chord.tones()
+    if are_tones_major_triad(tones):
+        new_additions.add('b3')
+        new_omissions.add(3)
+    elif are_tones_minor_triad(tones):
+        new_additions.add('#3')
+        new_omissions.add(3)
+
+    return FunChord(
+        chord.get_scale_name(),
+        chord.root_degree().get_name(),
+        additions=new_additions,
+        omissions=new_omissions)
+
+Parallel = FunMod('Parallel', parallel)
+mod_color_map[Parallel] = 'yellow'
+
+# Extensions
+def extension(extended_note: int, chord: FunChord) -> FunChord:
+    new_additions = chord.copy_additions()
+    new_omissions = chord.copy_omissions()
+    new_additions.add(extended_note)
+
+    return FunChord(
+        chord.get_scale_name(),
+        chord.root_degree().get_name(),
+        additions=new_additions,
+        omissions=new_omissions)
+
+def add7(chord: FunChord) -> FunChord:
+    return extension(7, chord)
+
+def add6(chord: FunChord) -> FunChord:
+    return extension(6, chord)
+
+def add9(chord: FunChord) -> FunChord:
+    return extension(9, chord)
+
+def add11(chord: FunChord) -> FunChord:
+    return extension(11, chord)
+
+Add6 = FunMod('Add6', add6)
+Add7 = FunMod('Add7', add7)
+Add9 = FunMod('Add9', add9)
+Add11 = FunMod('Add11', add11)
+
+extension_color = 'blue'
+for extension_mod in [Add6, Add7, Add9, Add11]:
+    mod_color_map[extension_mod] = extension_color

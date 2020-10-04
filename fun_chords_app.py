@@ -4,7 +4,7 @@ import mido
 import push2_python.constants
 from fun_chord import FunChord
 from fun_pad import ChordPad, ModPad
-from chord_mod import Sus2, Sus4
+from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
 import numpy as np
 
@@ -38,9 +38,9 @@ class FunChordApp(object):
             np.array([None] * 8),
             np.array([None] * 8),
             np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
-            np.array([None] * 8),
-            np.array([ModPad((6, 0), Sus4)] + [None] * 7),
-            np.array([ModPad((7, 0), Sus2)] + [None] * 7),
+            np.array([ModPad((5, 0), Parallel)] + [None] * 7),
+            np.array([ModPad((6, 0), Sus4), ModPad((6, 1), Add11), ModPad((6, 2), Add9)] + [None] * 5),
+            np.array([ModPad((7, 0), Sus2), ModPad((7, 1), Add7), ModPad((7, 2), Add6)] + [None] * 5),
         ])
 
         # Set all pads to their default color
