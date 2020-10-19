@@ -140,3 +140,16 @@ Add11 = FunMod('Add11', add11)
 extension_color = 'blue'
 for extension_mod in [Add6, Add7, Add9, Add11]:
     mod_color_map[extension_mod] = extension_color
+
+# Borrowed scale
+def seconday_fifth(chord: FunChord) -> FunChord:
+    new_additions = chord.copy_additions()
+    new_omissions = chord.copy_omissions()
+
+    new_scale = 0
+
+    return FunChord(
+        chord.get_scale_name(),
+        chord.root_degree().get_name(),
+        additions=new_additions,
+        omissions=new_omissions)
