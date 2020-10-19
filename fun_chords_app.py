@@ -70,15 +70,35 @@ class FunChordApp(object):
 
         tone (int): in scale tone (0 is root)
         """
-        bottom = max(0, voicing_center - 5)
-        top = min(11, voicing_center + 6)
-        # TODO: this doesn't handle extensions well, they sometimes need to be inverted twice down.
-        if tone < bottom:
-            return 1
-        elif tone > top:
-            return -1
-        else:
+        # Goal:
+        # +1 +1 0 0 0 0 0 cg 0 0 0 0 0 0 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -2 -2 -2
+        
+        diff = tone - voicing_center
+
+        top_thresh = 6
+        bottom_thresh = -5
+        if diff > 0:
+            if diff <= top_thresh:
+                return 0
+            return -1 - ((diff - top_thresh) // 12)
+
+        if diff > bottom_thresh:
             return 0
+        
+        # NOTE: bass shouldn't go below 1 octave
+        # TODO: do the // operation just in case
+        # (deal with the off by one since 5 // 2 = 2 but -5 // 2 = -3)
+        return 1
+
+        # bottom = max(0, voicing_center - 5)
+        # top = min(11, voicing_center + 6)
+        # # TODO: this doesn't handle extensions well, they sometimes need to be inverted twice down.
+        # if tone < bottom:
+        #     return 1
+        # elif tone > top:
+        #     return -1
+        # else:
+        #     return 0
 
     def play_active_chord(self, velocity):
         """
@@ -103,14 +123,18 @@ class FunChordApp(object):
             # CG voicing
             voicing_diff = 12 * self.cg_voicing(tones[idx], self.voicing_center)
             midi_note = midi_note + voicing_diff
+
+            # TODO: this can only work if I have two octaves to play with.
+            # # adjust if there are dissonant notes
+            # dissonant_notes = [midi_note + i for i in bad_intervals]
             
-            # adjust if there are dissonant notes
-            dissonant_notes = [midi_note + i for i in bad_intervals]
-            for note in dissonant_notes:
-                if note in handled_notes:
-                    midi_note += 12
-                    break
-            
+            # for note in dissonant_notes:
+            #     if note in handled_notes:
+            #         print(note, 'too close to', midi_note)
+            #         midi_note += 12
+            #         break
+            # handled_notes.add(midi_note)
+
             # send notes
             msg = mido.Message('note_on', note=midi_note, velocity=velocity)
             self.midi_out_port.send(msg)
