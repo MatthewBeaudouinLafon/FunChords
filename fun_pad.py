@@ -1,4 +1,6 @@
-from typing import Tuple
+from typing import Tuple, List
+import copy
+
 from fun_chord import FunChord
 from chord_mod import FunMod, mod_color_map, Sus2, Sus4
 
@@ -97,3 +99,47 @@ class ModPad(FunPad):
 
     def get_modifier(self):
         return self.mod.get_func()
+
+class BankPad(FunPad):
+    """
+    Stores a chord and modifiers.
+    """
+
+    def __init__(self, pad_ij: Tuple[int]):
+        super(BankPad, self).__init__(pad_ij)
+        self.recording_tap = False
+
+        self.chord = None
+        self.modifiers = None
+
+    def on_press(self, push, chord, modifiers):
+        super(BankPad, self).on_press(push)
+
+        self.recording_tap = False
+        if chord is not None:
+            self.recording_tap = True
+            self.chord = chord
+            self.modifiers = copy.deepcopy(modifiers)
+
+    def press_color(self):
+        return 'green'
+
+    def default_color(self):
+        if self.chord is None:
+            return 'blue'
+        else:
+            return 'yellow'
+
+    def get_chord(self) -> FunChord:
+        # Don't return chord if we just recorded the pad
+        if self.recording_tap:
+            return None
+
+        return self.chord
+
+    def get_modifier(self) -> List[FunMod]:
+        # Don't return chord if we just recorded the pad
+        if self.recording_tap:
+            return None
+
+        return self.modifiers

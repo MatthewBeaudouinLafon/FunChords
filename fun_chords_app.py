@@ -1,12 +1,14 @@
-import push2_python
 import time
+import numpy as np
+
+import push2_python
 import mido
 import push2_python.constants
+
 from fun_chord import FunChord
-from fun_pad import ChordPad, ModPad
+from fun_pad import ChordPad, ModPad, BankPad
 from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
-import numpy as np
 
 # TODO: Revisit voicing stuff
 class FunChordApp(object):
@@ -26,9 +28,9 @@ class FunChordApp(object):
         # Harmony
         self.active_scale_name = 'Cmaj'
         self.active_chord = None
+        self.modifiers = []
         self.octave = 3
         self.voicing_center = 0  # scale note that the chord voicing will move towards
-        self.modifiers = []
         self.note_ons = set()  # set of note-ons sent.
         self.previous_velocity = 64
 
@@ -37,7 +39,7 @@ class FunChordApp(object):
             np.array([None] * 8),
             np.array([None] * 8),
             np.array([None] * 8),
-            np.array([None] * 8),
+            np.array([BankPad((3, col)) for col in range(8)]),
             np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
             np.array([ModPad((5, 0), Parallel)] + [None] * 7),
             np.array([ModPad((6, 0), Sus4), ModPad((6, 1), Add11), ModPad((6, 2), Add9)] + [None] * 5),
@@ -207,15 +209,22 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
 
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
-        pad.on_press(app.push)
+        if type(pad) is BankPad:
+            pad.on_press(app.push, app.active_chord, app.modifiers)
+        else:
+            pad.on_press(app.push)
+
         if pad.get_chord() is not None:
             app.active_chord = pad.get_chord()
             should_play_chord = True
 
-        mod = pad.get_modifier()
-        if mod is not None and mod not in app.modifiers:
-            app.modifiers.append(mod)
-            should_play_chord = True
+        get_mod = pad.get_modifier()
+        # mod may be list if it's from a bank, or just the modifier
+        mods = get_mod if type(get_mod) == list else [get_mod]
+        for mod in mods:
+            if mod is not None and mod not in app.modifiers:
+                app.modifiers.append(mod)
+                should_play_chord = True
 
     if should_play_chord:
         app.previous_velocity = velocity
@@ -234,10 +243,13 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
             app.active_chord = None
             should_release_notes = True
 
-        mod = pad.get_modifier()
-        if mod is not None and mod in app.modifiers:
-            app.modifiers.remove(mod)
-            modifier_changed = True
+        get_mod = pad.get_modifier()
+        # mod may be list if it's from a bank, or just the modifier
+        mods = get_mod if type(get_mod) == list else [get_mod]
+        for mod in mods:
+            if mod is not None and mod in app.modifiers:
+                app.modifiers.remove(mod)
+                modifier_changed = True
 
     if should_release_notes:
         app.send_note_offs()

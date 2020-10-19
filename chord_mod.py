@@ -106,7 +106,7 @@ def parallel(chord: FunChord) -> FunChord:
         omissions=new_omissions)
 
 Parallel = FunMod('Parallel', parallel)
-mod_color_map[Parallel] = 'yellow'
+mod_color_map[Parallel] = 'orange'
 
 # Extensions
 def extension(extended_note: int, chord: FunChord) -> FunChord:
