@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Type
 import copy
 
 from fun_chord import FunChord
@@ -12,15 +12,56 @@ class FunPad(object):
     def __init__(self, pad_ij):
         # APIs
         self.pad_ij = pad_ij
+        self.is_pressed = False
+        self._registry_id = self.set_registry_id()
 
     def __repr__(self):
         return str(type(self)) + " at " + str(self.pad_ij)
 
-    def on_press(self, push):
+    def highlight(self, push):
+        # NOTE: This function should only change the pad's color
         push.pads.set_pad_color(self.pad_ij, self.press_color())
 
-    def on_release(self, push):
+    def release_highlight(self, push):
+        # NOTE: This function should only change the pad's color
         push.pads.set_pad_color(self.pad_ij, self.release_color())
+
+    def registry_highlight(self, push):
+        """ Used by the Registry to safely highlight the pad. """
+        self.highlight(push)
+    
+    def registry_release_highlight(self, push):
+        """ Used by the Registry to safely release highlight on the pad. """
+        # Don't un-highlight a pad if it is pressed but something tries to un-highlight through
+        # the registry.
+        if not self.is_pressed:
+            self.release_highlight(push)
+
+    def on_press(self, push):
+        """
+        What to do when the pad is pressed. If a pad overwrites this function to do extra stuff,
+        it should call the super anyway.
+        """
+        self.is_pressed = True
+        self.highlight(push)
+
+    def on_release(self, push):
+        """
+        What to do when the pad is released. If a pad overwrites this function to do extra stuff,
+        it should call the super anyway.
+        """
+        self.is_pressed = False
+        self.release_highlight(push)
+
+    def get_registry_id(self):
+        return self._registry_id
+
+    def set_registry_id(self, **kwargs):
+        """
+        Compute ID to use in the pad registry such that other functions can find this pad.
+        Should be unique per pad in the grid - and probably a simple name.
+        """
+        raise NotImplementedError
 
     def press_color(self):
         raise NotImplementedError
@@ -40,17 +81,26 @@ class FunPad(object):
     def get_modifier(self):
         return None
 
+    def get_highlight_pad_requests(self) -> str:
+        """
+        Get list of Registry IDs that should be lit up on button press and .
+        """
+        return []
+
 
 class ChordPad(FunPad):
     """
     This pad plays chords.
     """
     def __init__(self, pad_ij, scale, root_degree):
-        # APIs
-        super(ChordPad, self).__init__(pad_ij)
-
         # Model
         self.chord = FunChord(scale, root_degree)
+
+        # APIs (last such that the set_registry has everything it needs)
+        super(ChordPad, self).__init__(pad_ij)
+
+    def set_registry_id(self):
+        return 'Chord: ' + str(self.chord)
 
     def default_color(self):
         tonic_color = 'turquoise'
@@ -81,13 +131,20 @@ class ChordPad(FunPad):
     def get_chord(self):
         return self.chord
 
+    def get_highlight_pad_requests(self):
+        # return ['Chord: C maj']  # testing
+        pass
+
 class ModPad(FunPad):
     """
     Modifies chords.
     """
     def __init__(self, pad_ij: Tuple[int], mod: FunMod):
-        super(ModPad, self).__init__(pad_ij)
         self.mod = mod
+        super(ModPad, self).__init__(pad_ij)
+
+    def set_registry_id(self):
+        return 'Mod: ' + str(self.mod)
 
     def default_color(self):
         if self.mod in mod_color_map:
@@ -104,13 +161,18 @@ class BankPad(FunPad):
     """
     Stores a chord and modifiers.
     """
-
     def __init__(self, pad_ij: Tuple[int]):
-        super(BankPad, self).__init__(pad_ij)
         self.recording_tap = False
 
         self.chord = None
         self.modifiers = None
+
+        super(BankPad, self).__init__(pad_ij)
+
+    def set_registry_id(self):
+        # TODO: maybe have the registry update based on what's stored in the chord
+        # such that playing the chord+mods stored lights this up.
+        return None
 
     def on_press(self, push, chord, modifiers):
         super(BankPad, self).on_press(push)
@@ -143,3 +205,36 @@ class BankPad(FunPad):
             return None
 
         return self.modifiers
+
+
+##################################################
+#                    Registry                    #
+##################################################
+
+class PadRegistry(object):
+    """
+    Registry of active pads.
+    """
+    def __init__(self, pad_grid):
+        self._registry = dict()
+        for row in pad_grid:
+            for pad in row:
+                if pad is None or pad.get_registry_id() is None:
+                    continue
+                
+                rid = pad.get_registry_id()
+                assert rid not in self._registry, "Pad RID ({}) already in registry.".format(rid)
+
+                self._registry[rid] = pad
+
+    def __getitem__(self, key: str) -> FunPad:
+        try:
+            return self._registry[key]
+        except KeyError:
+            print("Warning: key ({}) not found in registry.".format(key))
+
+    def highlight_pad(self, pad_rid: str):
+        self._registry[pad_rid].highlight()
+
+    def release_pad_highlight(self, pad_rid: str):
+        self._registry[pad_rid].release_highlight()

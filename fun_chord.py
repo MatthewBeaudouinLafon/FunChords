@@ -136,6 +136,21 @@ class FunChord(object):
         self._additions = set([ScaleNote(note) for note in additions])
         self._omissions = set([ScaleNote(note) for note in omissions])
 
+    def __repr__(self):
+        # eg. Ab Maj 7 b9 -3 (removed 3rd)
+        scale_root_tone = note_util.name_to_number[self._scale_root]
+        degree_interval = self._scale[self._degree._note]
+        root_name = note_util.number_to_name[(scale_root_tone + degree_interval) % 12]
+
+        # root_name = str(self._scale_root)
+
+
+        extensions = [note.get_name for note in self._additions]
+        omissions = ['-' + note.get_name for note in self._additions]
+        name = ' '.join([root_name, self.scale_quality] + extensions + omissions)
+        print(name)
+        return name
+
     def __eq__(self, other):
         # TODO: invert additions into octave, compare notes in 12 tones.
         pass

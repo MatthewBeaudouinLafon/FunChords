@@ -6,7 +6,7 @@ import mido
 import push2_python.constants
 
 from fun_chord import FunChord
-from fun_pad import ChordPad, ModPad, BankPad
+from fun_pad import PadRegistry, ChordPad, ModPad, BankPad
 from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
 
@@ -45,6 +45,8 @@ class FunChordApp(object):
             np.array([ModPad((6, 0), Sus4), ModPad((6, 1), Add11), ModPad((6, 2), Add9)] + [None] * 5),
             np.array([ModPad((7, 0), Sus2), ModPad((7, 1), Add7), ModPad((7, 2), Add6)] + [None] * 5),
         ])
+
+        self.registry = PadRegistry(self.pads)
 
         self.init_colors()
 
@@ -209,15 +211,18 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
 
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
+        # Handle chord bank pads
         if type(pad) is BankPad:
             pad.on_press(app.push, app.active_chord, app.modifiers)
         else:
             pad.on_press(app.push)
 
+        # Handle chords pads
         if pad.get_chord() is not None:
             app.active_chord = pad.get_chord()
             should_play_chord = True
 
+        # Handle modifier pads
         get_mod = pad.get_modifier()
         # mod may be list if it's from a bank, or just the modifier
         mods = get_mod if type(get_mod) == list else [get_mod]
@@ -225,6 +230,12 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
             if mod is not None and mod not in app.modifiers:
                 app.modifiers.append(mod)
                 should_play_chord = True
+
+        # Highlight related pads through the Registry
+        highlight_requests = pad.get_highlight_pad_requests()
+        assert type(highlight_requests) == list, "pad.get_highlight_pad_requests() must return an object of type List[str], got {} instead.".format(highlight_requests)
+        for rid in highlight_requests:
+            app.registry[rid].registry_highlight(app.push)
 
     if should_play_chord:
         app.previous_velocity = velocity
@@ -236,13 +247,15 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
     should_release_notes = False
     modifier_changed = False
     pad = app.pads[pad_ij[0]][pad_ij[1]]
-    if pad:
+    if pad:        
+        # Handle chords pads
         pad.on_release(app.push)
         if pad.get_chord() is not None: # TODO: and pad.get_chord() == app.active_chord:
             # TODO: this acts dumb if two chord pads are active, need to rethink this.
             app.active_chord = None
             should_release_notes = True
 
+        # Handle modifier pads
         get_mod = pad.get_modifier()
         # mod may be list if it's from a bank, or just the modifier
         mods = get_mod if type(get_mod) == list else [get_mod]
@@ -250,6 +263,12 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
             if mod is not None and mod in app.modifiers:
                 app.modifiers.remove(mod)
                 modifier_changed = True
+
+        # Highlight related pads through the Registry
+        highlight_release_requests = pad.get_highlight_pad_requests()
+        assert type(highlight_release_requests) == list, "pad.get_highlight_pad_requests() must return an object of type List[str], got {} instead.".format(highlight_release_requests)
+        for rid in pad.get_highlight_pad_requests():
+            app.registry[rid].registry_release_highlight(app.push)
 
     if should_release_notes:
         app.send_note_offs()
