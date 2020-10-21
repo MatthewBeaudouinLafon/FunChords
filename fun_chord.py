@@ -142,14 +142,9 @@ class FunChord(object):
         degree_interval = self._scale[self._degree._note]
         root_name = note_util.number_to_name[(scale_root_tone + degree_interval) % 12]
 
-        # root_name = str(self._scale_root)
-
-
         extensions = [note.get_name for note in self._additions]
         omissions = ['-' + note.get_name for note in self._additions]
-        name = ' '.join([root_name, self.scale_quality] + extensions + omissions)
-        print(name)
-        return name
+        return ' '.join([root_name, self.scale_quality] + extensions + omissions)
 
     def __eq__(self, other):
         # TODO: invert additions into octave, compare notes in 12 tones.

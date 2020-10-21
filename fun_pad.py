@@ -1,6 +1,7 @@
 from typing import Tuple, List, Type
 import copy
 
+import note_util
 from fun_chord import FunChord
 from chord_mod import FunMod, mod_color_map, Sus2, Sus4
 
@@ -64,7 +65,8 @@ class FunPad(object):
         raise NotImplementedError
 
     def press_color(self):
-        raise NotImplementedError
+        # Default to green
+        return 'green'
 
     def default_color(self):
         raise NotImplementedError
@@ -87,6 +89,24 @@ class FunPad(object):
         """
         return []
 
+
+class PianoNotePad(FunPad):
+    def __init__(self, pad_ij, tone):
+        self.tone = tone
+
+        # APIs (last such that the set_registry has everything it needs)
+        super(PianoNotePad, self).__init__(pad_ij)
+
+    def set_registry_id(self):
+        return 'Note: ' + note_util.number_to_name[self.tone]
+
+    def default_color(self):
+        if self.tone in note_util.RELATIVE_KEY_DICT['maj']:
+            return 'white'
+        else:
+            return 'light_gray'
+
+    # TODO: Determine mechanism for multiple scale notes to highlight a chord.
 
 class ChordPad(FunPad):
     """
@@ -124,16 +144,10 @@ class ChordPad(FunPad):
                 return dominant_color
 
         return 'white'  # Something went wrong, default to white
-        
-    def press_color(self):
-        return 'green'
 
     def get_chord(self):
         return self.chord
 
-    def get_highlight_pad_requests(self):
-        # return ['Chord: C maj']  # testing
-        pass
 
 class ModPad(FunPad):
     """
@@ -150,9 +164,6 @@ class ModPad(FunPad):
         if self.mod in mod_color_map:
             return mod_color_map[self.mod]
         return 'white'
-
-    def press_color(self):
-        return 'green'
 
     def get_modifier(self):
         return self.mod.get_func()
@@ -182,9 +193,6 @@ class BankPad(FunPad):
             self.recording_tap = True
             self.chord = chord
             self.modifiers = copy.deepcopy(modifiers)
-
-    def press_color(self):
-        return 'green'
 
     def default_color(self):
         if self.chord is None:

@@ -6,9 +6,17 @@ import mido
 import push2_python.constants
 
 from fun_chord import FunChord
-from fun_pad import PadRegistry, ChordPad, ModPad, BankPad
+from fun_pad import PadRegistry, ChordPad, ModPad, BankPad, PianoNotePad
 from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
+
+def rids_from_chord(chord):
+    rids = []
+    for tone in chord.tones():
+        name = note_util.number_to_name[tone % 12]
+        rids.append('Note: ' + name)
+
+    return rids
 
 # TODO: Revisit voicing stuff
 class FunChordApp(object):
@@ -35,9 +43,10 @@ class FunChordApp(object):
         self.previous_velocity = 64
 
         # Model
+        maj_scale = note_util.RELATIVE_KEY_DICT['maj']
         self.pads = np.array([
-            np.array([None] * 8),
-            np.array([None] * 8),
+            np.array([None, PianoNotePad((0, 1), 1), PianoNotePad((0, 2), 3), None, PianoNotePad((0, 4), 6), PianoNotePad((0, 5), 8), PianoNotePad((0, 6), 10), None, None]),  # black notes
+            np.array([PianoNotePad((1, idx), tone) for idx, tone in enumerate(maj_scale)] + [None]),# [PianoNotePad((1, 7), 0)]),
             np.array([None] * 8),
             np.array([BankPad((3, col)) for col in range(8)]),
             np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
@@ -104,6 +113,17 @@ class FunChordApp(object):
         # else:
         #     return 0
 
+    def compute_modded_chord(self):
+        chord = self.active_chord
+
+        if chord is None:
+            return None
+
+        for mod in self.modifiers:
+            chord = mod(chord)
+
+        return chord
+
     def play_active_chord(self, velocity):
         """
         Sends the midi message for the active chord. Use this after changing the active chord.
@@ -112,13 +132,10 @@ class FunChordApp(object):
         # TODO: parametrize acceptable dissonance
         bad_intervals = [1, 2]
         bad_intervals += [-i for i in bad_intervals]
-        chord = self.active_chord
+        chord = self.compute_modded_chord()
 
         if chord is None:
             return
-
-        for mod in self.modifiers:
-            chord = mod(chord)
 
         self.send_note_offs()
         tones = chord.tones()
@@ -208,6 +225,7 @@ def on_button_released(_, button_name):
 @push2_python.on_pad_pressed()
 def on_pad_pressed(_, pad_n, pad_ij, velocity):
     should_play_chord = False
+    previous_modded_chord = app.compute_modded_chord()
 
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
@@ -231,21 +249,28 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
                 app.modifiers.append(mod)
                 should_play_chord = True
 
-        # Highlight related pads through the Registry
-        highlight_requests = pad.get_highlight_pad_requests()
-        assert type(highlight_requests) == list, "pad.get_highlight_pad_requests() must return an object of type List[str], got {} instead.".format(highlight_requests)
-        for rid in highlight_requests:
-            app.registry[rid].registry_highlight(app.push)
-
     if should_play_chord:
         app.previous_velocity = velocity
         app.play_active_chord(velocity)
+
+        # Highlight related pads through the Registry
+        modded_chord = app.compute_modded_chord()
+        if previous_modded_chord:
+            # Clear previous pads
+            for rid in rids_from_chord(previous_modded_chord):
+                app.registry[rid].registry_release_highlight(app.push)
+
+        if modded_chord:
+            # Highlight new pads
+            for rid in rids_from_chord(modded_chord):
+                app.registry[rid].registry_highlight(app.push)
 
 
 @push2_python.on_pad_released()
 def on_pad_released(_, pad_n, pad_ij, velocity):
     should_release_notes = False
     modifier_changed = False
+    previous_modded_chord = app.compute_modded_chord()
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:        
         # Handle chords pads
@@ -264,17 +289,40 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
                 app.modifiers.remove(mod)
                 modifier_changed = True
 
-        # Highlight related pads through the Registry
-        highlight_release_requests = pad.get_highlight_pad_requests()
-        assert type(highlight_release_requests) == list, "pad.get_highlight_pad_requests() must return an object of type List[str], got {} instead.".format(highlight_release_requests)
-        for rid in pad.get_highlight_pad_requests():
-            app.registry[rid].registry_release_highlight(app.push)
-
     if should_release_notes:
         app.send_note_offs()
+
+        # Release highlight related pads through the Registry
+        new_computed_chord = app.compute_modded_chord()
+        if previous_modded_chord:
+            chord = previous_modded_chord if new_computed_chord is None else new_computed_chord
+
+            # TODO: could probably be optimized to make fewer calls
+            # Release previous pads
+            # for rid in rids_from_chord(previous_modded_chord):
+            #     app.registry[rid].registry_release_highlight(app.push)
+
+            # Highlight new pads
+            for rid in rids_from_chord(chord):
+                app.registry[rid].registry_release_highlight(app.push)
+
     elif modifier_changed:
         # replay the chord if the modifier changed
         app.play_active_chord(app.previous_velocity)
+
+        # Highlight related pads through the Registry
+        new_computed_chord = app.compute_modded_chord()
+        if previous_modded_chord:
+            chord = previous_modded_chord if new_computed_chord is None else new_computed_chord
+
+            # TODO: could probably be optimized to make fewer calls
+            # Release previous pads
+            for rid in rids_from_chord(previous_modded_chord):
+                app.registry[rid].registry_release_highlight(app.push)
+
+            # Highlight new pads
+            for rid in rids_from_chord(chord):
+                app.registry[rid].registry_highlight(app.push)
 
 if __name__ == "__main__":
     app = FunChordApp()
