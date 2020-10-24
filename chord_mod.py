@@ -87,6 +87,7 @@ def diminished(chord: FunChord) -> FunChord:
 def augmented(chord: FunChord) -> FunChord:
     pass
 
+# TODO: implement augmented <-> diminished
 def parallel(chord: FunChord) -> FunChord:
     new_additions = chord.copy_additions()
     new_omissions = chord.copy_omissions()

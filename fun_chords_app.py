@@ -77,6 +77,11 @@ class FunChordApp(object):
     def init_push(self):
         return push2_python.Push2(use_user_midi_port=True)
 
+    def play_midi_note(self, midi_note, velocity):
+        msg = mido.Message('note_on', note=midi_note, velocity=velocity)
+        self.midi_out_port.send(msg)
+        self.note_ons.add(midi_note)
+
     def cg_voicing(self, tone, voicing_center):
         """
         Returns how many octaves up or down this note should be.
@@ -157,9 +162,11 @@ class FunChordApp(object):
             # handled_notes.add(midi_note)
 
             # send notes
-            msg = mido.Message('note_on', note=midi_note, velocity=velocity)
-            self.midi_out_port.send(msg)
-            self.note_ons.add(midi_note)
+            self.play_midi_note(midi_note, velocity)
+
+        # Bass Note
+        bass_note = chord.midi_notes(self.octave - 1)[0]
+        self.play_midi_note(bass_note, velocity)
 
     def send_note_offs(self):
         for note in list(self.note_ons):
