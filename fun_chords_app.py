@@ -12,8 +12,9 @@ import note_util
 
 def rids_from_chord(chord):
     rids = []
+    root = chord.get_root_tone()
     for tone in chord.tones():
-        name = note_util.number_to_name[tone % 12]
+        name = note_util.number_to_name[(tone + root) % 12]
         rids.append('Note: ' + name)
 
     return rids
@@ -34,7 +35,7 @@ class FunChordApp(object):
         self.running = False
 
         # Harmony
-        self.active_scale_name = 'Cmaj'
+        self.active_scale_name = 'Dmin'# 'Cmaj'
         self.active_chord = None
         self.modifiers = []
         self.octave = 3
@@ -46,14 +47,14 @@ class FunChordApp(object):
         maj_scale = note_util.RELATIVE_KEY_DICT['maj']
         self.pads = np.array([
             np.array([None, PianoNotePad((0, 1), 1), PianoNotePad((0, 2), 3), None, PianoNotePad((0, 4), 6), PianoNotePad((0, 5), 8), PianoNotePad((0, 6), 10), None, None]),  # black notes
-            np.array([PianoNotePad((1, idx), tone) for idx, tone in enumerate(maj_scale)] + [None]),# [PianoNotePad((1, 7), 0)]),
+            np.array([PianoNotePad((1, idx), tone) for idx, tone in enumerate(maj_scale)] + [None]),# [PianoNotePad((1, 7), 0)]),  TODO: make the registry support duplicates
             np.array([None] * 8),
             np.array([BankPad((3, col)) for col in range(8)]),
             np.array([ChordPad((4, degree), self.active_scale_name, degree + 1) for degree in range(7)] + [None]),
             np.array([ModPad((5, 0), Parallel)] + [None] * 7),
             np.array([ModPad((6, 0), Sus4), ModPad((6, 1), Add11), ModPad((6, 2), Add9)] + [None] * 5),
             np.array([ModPad((7, 0), Sus2), ModPad((7, 1), Add7), ModPad((7, 2), Add6)] + [None] * 5),
-        ])
+        ], dtype=object)
 
         self.registry = PadRegistry(self.pads)
 

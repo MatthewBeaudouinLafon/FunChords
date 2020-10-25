@@ -83,6 +83,9 @@ class ScaleNote(object):
         # shitty hash but should work
         return self._accidental * 100 + self._note
 
+    def get_tone(self) -> int:
+        return self._note
+
     def get_name(self) -> str:
         return self.accidental_str() + str(self._note + 1)
 
@@ -149,6 +152,9 @@ class FunChord(object):
     def __eq__(self, other):
         # TODO: invert additions into octave, compare notes in 12 tones.
         pass
+
+    def get_root_tone(self):
+        return note_util.name_to_number[self._scale_root]
 
     def copy_additions(self):
         return self._additions.copy()
