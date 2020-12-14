@@ -51,8 +51,6 @@ def split_note_octave(name, default_octave=1):
 
         # C-1 or C10
 
-
-
 def name_to_midi(name):
     """
     Convert nome formed as (note, accidental, octave) to midi note number.
@@ -123,6 +121,42 @@ def scalenumber_to_note(number, scale):
 interval_consonance = [1, 10, 8, 6, 4, 3, 7, 2, 5, 4, 9, 8]
 sorted_interval_by_consonance = list(np.argsort(interval_consonance))
 sorted_interval_by_dissonance = sorted_interval_by_consonance[::-1]
+
+def cg_voicing(tone, voicing_center):
+    """
+    Returns how many octaves up or down this note should be.
+
+    tone (int): in scale tone (0 is root)
+    """
+    # Goal: octave shift as shown below
+    # +1 +1 0 0 0 0 0 cg 0 0 0 0 0 0 -1 -1 ...(7*'-1')... -1 -1 -2 -2 -2 etc.
+    
+    diff = tone - voicing_center
+
+    top_thresh = 6
+    bottom_thresh = -5
+    if diff > 0:
+        if diff <= top_thresh:
+            return 0
+        return -1 - ((diff - top_thresh) // 12)
+
+    if diff > bottom_thresh:
+        return 0
+    
+    # NOTE: bass shouldn't go below 1 octave
+    # TODO: do the // operation just in case
+    # (deal with the off by one since 5 // 2 = 2 but -5 // 2 = -3)
+    return 1
+
+    # bottom = max(0, voicing_center - 5)
+    # top = min(11, voicing_center + 6)
+    # # TODO: this doesn't handle extensions well, they sometimes need to be inverted twice down.
+    # if tone < bottom:
+    #     return 1
+    # elif tone > top:
+    #     return -1
+    # else:
+    #     return 0
 
 if __name__ == "__main__":
     print("Sorted interval by consonance")

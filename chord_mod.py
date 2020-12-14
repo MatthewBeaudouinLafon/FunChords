@@ -110,10 +110,15 @@ Parallel = FunMod('Parallel', parallel)
 mod_color_map[Parallel] = 'orange'
 
 # Extensions
-def extension(extended_note: int, chord: FunChord) -> FunChord:
+def extend(chord: FunChord, extended_note: List[int], omissions=[]) -> FunChord:
     new_additions = chord.copy_additions()
     new_omissions = chord.copy_omissions()
-    new_additions.add(extended_note)
+
+    for note in extended_note:
+        new_additions.add(note)
+
+    for note in omissions:
+        new_omissions.add(note)
 
     return FunChord(
         chord.get_scale_name(),
@@ -122,16 +127,16 @@ def extension(extended_note: int, chord: FunChord) -> FunChord:
         omissions=new_omissions)
 
 def add7(chord: FunChord) -> FunChord:
-    return extension(7, chord)
+    return extend(chord, [7])
 
 def add6(chord: FunChord) -> FunChord:
-    return extension(6, chord)
+    return extend(chord, [6], omissions=[7])
 
 def add9(chord: FunChord) -> FunChord:
-    return extension(9, chord)
+    return extend(chord, [7, 9])
 
 def add11(chord: FunChord) -> FunChord:
-    return extension(11, chord)
+    return extend(chord, [7, 9, 11])
 
 Add6 = FunMod('Add6', add6)
 Add7 = FunMod('Add7', add7)

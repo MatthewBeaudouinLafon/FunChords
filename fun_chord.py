@@ -137,6 +137,8 @@ class FunChord(object):
         self.scale_quality = quality
         self._degree = ScaleNote(degree)  # scale degree of the chord's root note
         self._additions = set([ScaleNote(note) for note in additions])
+
+        # NOTE: omissions can exclude additions.
         self._omissions = set([ScaleNote(note) for note in omissions])
 
     def __repr__(self):
@@ -183,6 +185,21 @@ class FunChord(object):
                 triad.remove(omitted_note)
         return triad
 
+    def tonify_note(self, scale_note):
+        """ Convert a ScaleNote into a tone. """
+        note_index = scale_note._note
+
+        scale_len = len(self._scale)
+        tone = self._scale[note_index % scale_len] + 12 * (note_index // scale_len)
+        tone += scale_note._accidental
+        return tone
+
+    def midify_tone(self, tone, octave):
+        """ Convert a tone to midi. """
+        scale_root_midi_name = str(self._scale_root) + str(octave)
+        root_midi = note_util.name_to_midi(scale_root_midi_name)
+        return root_midi + tone
+
     def scale_notes(self):
         """
         Returns the notes in scale used.
@@ -201,23 +218,49 @@ class FunChord(object):
         """
         Returns notes in twelve tone value.
         """
-        tones = []
-        for scale_note in self.scale_notes():
-            note_index = scale_note._note
+        return [self.tonify_note(scale_note) for scale_note in self.scale_notes()]
 
-            scale_len = len(self._scale)
-            tone = self._scale[note_index % scale_len] + 12 * (note_index // scale_len)
-            tone += scale_note._accidental
-            tones.append(tone)
-        return tones
+        # tones = []
+        # for scale_note in self.scale_notes():
+        #     note_index = scale_note._note
 
-    def midi_notes(self, octave):
+        #     scale_len = len(self._scale)
+        #     tone = self._scale[note_index % scale_len] + 12 * (note_index // scale_len)
+        #     tone += scale_note._accidental
+        #     tones.append(tone)
+        # return tones
+
+    def midi_notes(self, octave, voicing_center=None):
         """
         Return list of midi notes.
         """
-        scale_root_midi_name = str(self._scale_root) + str(octave)
-        root_midi = note_util.name_to_midi(scale_root_midi_name)
-        return [root_midi + tone for tone in self.tones()]
+        midi_note_list = []
+        for tone in self.tones():
+            midi_note = self.midify_tone(tone, octave)
+
+            if voicing_center is not None:
+                octave_shift = 12 * note_util.cg_voicing(tone=tone, voicing_center=voicing_center)
+                midi_note = midi_note + octave_shift
+            
+            midi_note_list.append(midi_note)
+            
+        return midi_note_list
+
+        # TODO: this can only work if I have two octaves to play with.
+        # # adjust if there are dissonant notes
+        # handled_notes = set()  # midi notes
+        # dissonant_notes = [midi_note + i for i in bad_intervals]
+        
+        # for note in dissonant_notes:
+        #     if note in handled_notes:
+        #         print(note, 'too close to', midi_note)
+        #         midi_note += 12
+        #         break
+        # handled_notes.add(midi_note)
+
+        # scale_root_midi_name = str(self._scale_root) + str(octave)
+        # root_midi = note_util.name_to_midi(scale_root_midi_name)
+        # return [root_midi + tone for tone in self.tones()]
 
 if __name__ == "__main__":
     scale = 'Cmaj'
