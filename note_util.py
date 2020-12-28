@@ -31,67 +31,35 @@ sharp_to_flat = {
 
 flat_to_sharp = {value: key for key, value in sharp_to_flat.items()}
 
-def split_note_octave(name, default_octave=1):
-    len_name = len(name)
-    if len_name == 1:
-        return (name, default_octave)
-
-    if len_name == 2:
-        # accidental eg C#
-        if name[1] in ('#', 'b'):
-            return (name, default_octave)
-
-        # actual octave eg C1
-        return name[0], name[1]
-
-    if len_name == 3:
-        # C#1
-        if name[1] in ('#', 'b'):
-            return name
-
-        # C-1 or C10
+def tone_to_midi(tone, midi_octave):
+    return tone + midi_octave * 12
 
 def name_to_midi(name):
     """
     Convert nome formed as (note, accidental, octave) to midi note number.
     eg. C#2 -> 49
     """
+    # TODO: regex
     note, octave = name[:-1], int(name[-1:])
 
     if 'b' in note:
         note = flat_to_sharp[note]
 
     note_val = name_to_number[note]
-    octave_offset = (octave + 2) * 12  # NOTE: octave starts at -2
-    return note_val + octave_offset
+    return tone_to_midi(note_val, octave + 2)  # NOTE: octave in name starts at -2
 
 def midi_note_octave(midi_note):
     return midi_note // 12 - 2
 
+def midi_note_nearest_name_octave(midi_note):
+    octave = midi_note_octave(midi_note) + 2  # NOTE: octave in name starts at -2
+    tone = midi_note % 12
+    if tone >= 6:
+        octave += 1
+    return octave
+
 def midi_to_name(midi: int, include_octave=False, accidental_preference='#'):
     assert accidental_preference in ('#', 'b'), "accidental_preference should be #, or b, not {}".format(accidental_preference)
-    number_to_name = {
-        0: "C",
-        1: "C#",
-        2: "D",
-        3: "D#",
-        4: "E",
-        5: "F",
-        6: "F#",
-        7: "G",
-        8: "G#",
-        9: "A",
-        10: "A#",
-        11: "B"
-    }
-
-    sharp_to_flat = {
-        "C#": "Db",
-        "D#": "Eb",
-        "F#": "Gb",
-        "G#": "Ab",
-        "A#": "Bb",
-    }
 
     octave = midi_note_octave(midi)
     tone = midi % 12
