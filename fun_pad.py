@@ -221,7 +221,12 @@ class BankPad(FunPad):
 
 class PadRegistry(object):
     """
-    Registry of active pads.
+    Registry of pads to keep track of which pads are active.
+
+    It's effectively a dictionary mapping "Registry IDs" to the Pad objects. This allows pads
+    to act on other pads via a simple ID. For example, a chord can highlight note pads on the piano.
+    Registry IDs are strings unique to each pad and should be easy to compute based on the purpose
+    of the pad. For example, the ID for C on the pad piano is 'Note: C'.
     """
     def __init__(self, pad_grid):
         self._registry = dict()

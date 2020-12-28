@@ -10,9 +10,9 @@ from fun_pad import PadRegistry, ChordPad, ModPad, BankPad, PianoNotePad
 from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
 
-def rids_from_chord(chord):
+def rids_from_chord(chord: FunChord):
     rids = []
-    root = chord.get_root_tone()
+    root = chord.get_scale_root_tone()
     for tone in chord.tones():
         name = note_util.number_to_name[(tone + root) % 12]
         rids.append('Note: ' + name)
@@ -40,8 +40,10 @@ class FunChordApp(object):
         self.active_scale_name = 'Cmaj'
         self.active_chord = None
         self.modifiers = []
-        self.octave = 3
-        self.voicing_center = 0  # scale note that the chord voicing will move towards
+
+        # midi note that the chord voicing will move towards
+        self.voicing_center = note_util.name_to_midi('C2')
+
         self.note_ons = set()  # set of note-ons sent.
         self.previous_velocity = 64
 
@@ -110,12 +112,8 @@ class FunChordApp(object):
             return
 
         self.send_note_offs()
-        for midi_note in chord.midi_notes(self.octave, self.voicing_center):
+        for midi_note in chord.midi_notes(self.voicing_center):
             self.play_midi_note(midi_note, velocity)
-
-        # Bass Note
-        bass_note = chord.midi_notes(self.octave - 1)[0]
-        self.play_midi_note(bass_note, velocity)
 
     def send_note_offs(self):
         for note in list(self.note_ons):
