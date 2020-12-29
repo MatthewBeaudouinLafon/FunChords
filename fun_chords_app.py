@@ -64,6 +64,9 @@ class FunChordApp(object):
 
         self.init_colors()
 
+    def color_wipe(self):
+        self.push.pads.set_all_pads_to_black()
+
     def init_colors(self):
         # Set all pads to their default color
         # TODO: Make this part of the init for Pad?
@@ -75,9 +78,9 @@ class FunChordApp(object):
                 else:
                     self.push.pads.set_pad_color((i,j), color='black')
 
-        # Start by setting all pad colors to white
+        # Set button colors to white
         self.push.buttons.set_button_color(push2_python.constants.BUTTON_STOP)
-        self.push.buttons.set_button_color(push2_python.constants.BUTTON_NEW)
+        self.push.buttons.set_button_color(push2_python.constants.BUTTON_SETUP)
 
     def init_push(self):
         return push2_python.Push2(use_user_midi_port=True)
@@ -125,33 +128,33 @@ class FunChordApp(object):
         self.running = False
 
     def run_loop(self):
+        print("\nPress [Setup] to refresh color (after switching User modes)")
         print("Starting FunChord...")
         self.running = True
-        # TODO: fix 'stop clip' button only half working?
 
         try:
             while self.running:
                 # TODO: retry connection to push if possible, and reset starting colors
                 time.sleep(0.1)
-                pass
         except KeyboardInterrupt:
-            self.end_app()
+            pass
+
+        self.end_app()  # when self.running is False
 
     def end_app(self):
         print("\nStopping FunChord...")
-        # TODO: clear push ui
         self.send_note_offs()
         self.push.pads.set_all_pads_to_black()
+        self.push.buttons.set_all_buttons_color('black')
         self.push.f_stop.set()
         self.midi_out_port.close()
 
 @push2_python.on_button_pressed()
 def on_button_pressed(_, button_name):
-    if button_name in (push2_python.constants.BUTTON_NEW,
-                       push2_python.constants.BUTTON_STOP,
+    if button_name in (push2_python.constants.BUTTON_STOP,
                        push2_python.constants.BUTTON_SETUP,
                        push2_python.constants.BUTTON_USER):
-        # Set pressed button color to white
+        # Set pressed button color to red
         app.push.buttons.set_button_color(button_name, 'red')
         
     else:
@@ -164,11 +167,15 @@ def on_button_released(_, button_name):
     if button_name == push2_python.constants.BUTTON_STOP:
         app.stop()
 
-    if button_name == push2_python.constants.BUTTON_SETUP:
-            app.init_colors()
+    if button_name == push2_python.constants.BUTTON_USER:
+        app.color_wipe()
+        app.init_colors()
 
-    if button_name in (push2_python.constants.BUTTON_NEW,
-                       push2_python.constants.BUTTON_STOP,
+    if button_name == push2_python.constants.BUTTON_SETUP:
+        app.color_wipe()
+        app.init_colors()
+
+    if button_name in (push2_python.constants.BUTTON_STOP,
                        push2_python.constants.BUTTON_SETUP,
                        push2_python.constants.BUTTON_USER):
         app.push.buttons.set_button_color(button_name, 'white')
