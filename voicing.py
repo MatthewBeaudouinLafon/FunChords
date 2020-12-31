@@ -221,6 +221,10 @@ def spread_voicing(
     Returns:
         A list of midi notes.
     """
+    # TODO: use note_util.sorted_intervals_by_dissonance < 6 to select.
+    # TODO: parametrize acceptable dissonance
+    # bad_intervals = [1, 2]
+    # bad_intervals += [-i for i in bad_intervals]
     raise NotImplementedError
 
 voicing_function[VoicingType.SPREAD] = spread_voicing
@@ -286,40 +290,32 @@ def guitar_voicing(
     midi_notes = []
 
     chord_tones = chord.tones()
-    remaining_notes = deepcopy(chord_tones)
-    num_attempts = 0  # number of notes attempted
+    tone_idx = 0
+    full_loop_idx = 0
     for idx, string_tone in enumerate(guitar_tones[:-1]):  # For each lane...
         next_string_tone = guitar_tones[idx + 1]
         octave = octave_center + relative_octave_list[idx]
 
-        # Refresh remaining notes
-        if len(remaining_notes) == 0:
-            # TODO: find a better way to reintroduce extension notes instead of root/5th
-            dbprint("Replenish notes")
-            remaining_notes = deepcopy(chord_tones)
-
-        if num_attempts == len(chord_tones) - 1:
-            # Failed to put any note in this lane, skip it
-            dbprint("Skipping string {} ({})".format(idx, guitar_note_names[idx]))
-            num_attempts = 0
-            continue
-
-        dbprint("On string {} ({})".format(idx, guitar_note_names[idx]))
-        # Find chord note that fits in this lane 
-        for tone in remaining_notes:
-            dbprint("Try placing {}".format(tone))
+        # do-while loop to try every note once at most per string, then give up
+        full_loop_idx = tone_idx
+        dbprint('full loop idx: {}'.format(full_loop_idx))
+        while True:
+            dbprint('tone_idx: {}'.format(tone_idx))
+            tone = chord_tones[tone_idx]
+            dbprint('trying tone: {}'.format(tone))
             if is_in_lane(tone, string_tone, next_string_tone):
+                dbprint('Success! with tone: {}'.format(tone))
                 midi_notes.append(note_util.tone_to_midi(tone, octave))
-
-                # Remove first occurence of the note, which works because we're stepping forward
-                # through the tones.
+                tone_idx = (tone_idx + 1) % len(chord_tones)
+                dbprint('\n')
+                break
                 # TODO: for the initial triad, if the first note doesn't fit we're likely to get
                 # 3-1-5, which is a bad voicing (huge leap at the bottom).
-                remaining_notes.remove(tone)
-                num_attempts = 0
+            dbprint('...')
+            tone_idx = (tone_idx + 1) % len(chord_tones)
+            if tone_idx == full_loop_idx:
+                dbprint("Could not place any note in lane.")
                 break
-            num_attempts += 1
-        dbprint()
     dbprint('-'*8+'\n')
 
     return midi_notes
