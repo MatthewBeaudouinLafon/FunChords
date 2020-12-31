@@ -86,7 +86,7 @@ RELATIVE_KEY_DICT = {
 
 def scalenumber_to_note(number, scale):
     # assert 0 <= number < 12, "note number out of range"
-    pass
+    raise NotImplementedError
 
 # row index is the interval
 interval_consonance = [1, 10, 8, 6, 4, 3, 7, 2, 5, 4, 9, 8]

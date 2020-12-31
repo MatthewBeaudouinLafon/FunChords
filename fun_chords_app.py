@@ -38,14 +38,13 @@ class FunChordApp(object):
         # self.active_scale_name = 'Dmin'
         # self.active_scale_name = 'Emin'
         self.active_scale_name = 'Cmaj'
-        self.active_chord = None
+        self._active_chord_stack = []  # List of (chord, velocity_when_played). Use related methods.
         self.modifiers = []
 
         # midi note that the chord voicing will move towards
         self.voicing_center = note_util.name_to_midi('C2')
 
         self.note_ons = set()  # set of note-ons sent.
-        self.previous_velocity = 64
 
         # Model
         maj_scale = note_util.RELATIVE_KEY_DICT['maj']
@@ -63,6 +62,28 @@ class FunChordApp(object):
         self.registry = PadRegistry(self.pads)
 
         self.init_colors()
+
+    def get_active_chord(self):
+        if not self.is_active_chord_list_empty():
+            return self._active_chord_stack[-1][0]  # [(chord, velocity), ...]
+        return None
+
+    def get_active_chord_velocity(self):
+        # TODO: if more properties are needed, just make this 'get active chord props'
+        if not self.is_active_chord_list_empty():
+            return self._active_chord_stack[-1][1]  # [(chord, velocity), ...]
+        return None
+
+    def append_active_chord(self, chord, velocity):
+        self._active_chord_stack.append((chord, velocity))
+
+    def remove_active_chord(self, target_chord):
+        # Use a filter to remove target chord (ie. keep chords that aren't the target)
+        self._active_chord_stack = \
+            [item for item in self._active_chord_stack if item[0] is not target_chord]
+
+    def is_active_chord_list_empty(self):
+        return len(self._active_chord_stack) == 0
 
     def color_wipe(self):
         self.push.pads.set_all_pads_to_black()
@@ -86,12 +107,14 @@ class FunChordApp(object):
         return push2_python.Push2(use_user_midi_port=True)
 
     def play_midi_note(self, midi_note, velocity):
+        if velocity == 0:
+            print("Warning: 0 velocity note on is treated by note off according to MIDI")
         msg = mido.Message('note_on', note=midi_note, velocity=velocity)
         self.midi_out_port.send(msg)
         self.note_ons.add(midi_note)
 
     def compute_modded_chord(self):
-        chord = self.active_chord
+        chord = self.get_active_chord()
 
         if chord is None:
             return None
@@ -101,15 +124,12 @@ class FunChordApp(object):
 
         return chord
 
-    def play_active_chord(self, velocity):
+    def play_active_chord(self):
         """
         Sends the midi message for the active chord. Use this after changing the active chord.
         """
-        # TODO: use note_util.sorted_intervals_by_dissonance < 6 to select.
-        # TODO: parametrize acceptable dissonance
-        bad_intervals = [1, 2]
-        bad_intervals += [-i for i in bad_intervals]
         chord = self.compute_modded_chord()
+        velocity = self.get_active_chord_velocity()
 
         if chord is None:
             return
@@ -124,7 +144,7 @@ class FunChordApp(object):
             self.midi_out_port.send(msg)
             self.note_ons.remove(note)
 
-    def stop(self):
+    def stop_loop(self):
         self.running = False
 
     def run_loop(self):
@@ -165,7 +185,7 @@ def on_button_pressed(_, button_name):
 def on_button_released(_, button_name):
     # Set released button color to black (off)
     if button_name == push2_python.constants.BUTTON_STOP:
-        app.stop()
+        app.stop_loop()
 
     if button_name == push2_python.constants.BUTTON_USER:
         app.color_wipe()
@@ -192,13 +212,13 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
     if pad:
         # Handle chord bank pads
         if type(pad) is BankPad:
-            pad.on_press(app.push, app.active_chord, app.modifiers)
+            pad.on_press(app.push, app.get_active_chord(), app.modifiers)
         else:
             pad.on_press(app.push)
 
         # Handle chords pads
         if pad.get_chord() is not None:
-            app.active_chord = pad.get_chord()
+            app.append_active_chord(pad.get_chord(), velocity)
             should_play_chord = True
 
         # Handle modifier pads
@@ -211,8 +231,7 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
                 should_play_chord = True
 
     if should_play_chord:
-        app.previous_velocity = velocity
-        app.play_active_chord(velocity)
+        app.play_active_chord()
 
         # Highlight related pads through the Registry
         modded_chord = app.compute_modded_chord()
@@ -227,19 +246,26 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
                 app.registry[rid].registry_highlight(app.push)
 
 
+# TODO: content of the pad callbacks should be in the app
 @push2_python.on_pad_released()
 def on_pad_released(_, pad_n, pad_ij, velocity):
     should_release_notes = False
+    should_play_chord = False
     modifier_changed = False
     previous_modded_chord = app.compute_modded_chord()
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:        
         # Handle chords pads
         pad.on_release(app.push)
-        if pad.get_chord() is not None: # TODO: and pad.get_chord() == app.active_chord:
-            # TODO: this acts dumb if two chord pads are active, need to rethink this.
-            app.active_chord = None
-            should_release_notes = True
+        if pad.get_chord() is not None:
+            if not app.is_active_chord_list_empty():
+                app.remove_active_chord(pad.get_chord())
+            else:
+                print("Warning: tried to remove chord from empty stack.\
+This is likely because the pad was pressed before push was ready.")
+
+            if app.is_active_chord_list_empty():
+                should_release_notes = True
 
         # Handle modifier pads
         get_mod = pad.get_modifier()
@@ -249,8 +275,23 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
             if mod is not None and mod in app.modifiers:
                 app.modifiers.remove(mod)
                 modifier_changed = True
+    
+    if should_play_chord:
+        app.play_active_chord()
 
-    if should_release_notes:
+        # Highlight related pads through the Registry
+        modded_chord = app.compute_modded_chord()
+        if previous_modded_chord:
+            # Clear previous pads
+            for rid in rids_from_chord(previous_modded_chord):
+                app.registry[rid].registry_release_highlight(app.push)
+
+        if modded_chord:
+            # Highlight new pads
+            for rid in rids_from_chord(modded_chord):
+                app.registry[rid].registry_highlight(app.push)
+
+    elif should_release_notes:
         app.send_note_offs()
 
         # Release highlight related pads through the Registry
@@ -269,7 +310,7 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
 
     elif modifier_changed:
         # replay the chord if the modifier changed
-        app.play_active_chord(app.previous_velocity)
+        app.play_active_chord()
 
         # Highlight related pads through the Registry
         new_computed_chord = app.compute_modded_chord()

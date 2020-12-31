@@ -170,7 +170,7 @@ class FunChord(object):
 
     def __eq__(self, other):
         # TODO: invert additions into octave, compare notes in 12 tones.
-        pass
+        raise NotImplementedError
 
     def get_scale_root_tone(self):
         return note_util.name_to_number[self._scale_root]
@@ -246,7 +246,7 @@ class FunChord(object):
             voicing_center,
             voicing_range=1,
             bass_note=True,
-            voicing_type=VoicingType.WRAP
+            voicing_type=VoicingType.GUITAR
         )
 
 if __name__ == "__main__":

@@ -82,10 +82,10 @@ def are_tones_minor_triad(tones: List[int]) -> bool:
     return third_interval == 3
 
 def diminished(chord: FunChord) -> FunChord:
-    pass
+    raise NotImplementedError
 
 def augmented(chord: FunChord) -> FunChord:
-    pass
+    raise NotImplementedError
 
 # TODO: implement augmented <-> diminished
 def parallel(chord: FunChord) -> FunChord:
