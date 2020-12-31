@@ -260,9 +260,9 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
         if pad.get_chord() is not None:
             if not app.is_active_chord_list_empty():
                 app.remove_active_chord(pad.get_chord())
+                should_play_chord = True
             else:
-                print("Warning: tried to remove chord from empty stack.\
-This is likely because the pad was pressed before push was ready.")
+                print("Warning: tried to remove chord from empty stack. This is likely because the pad was pressed before push was ready.")
 
             if app.is_active_chord_list_empty():
                 should_release_notes = True
