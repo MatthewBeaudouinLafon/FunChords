@@ -78,12 +78,25 @@ class FunChordApp(object):
         self._active_chord_stack.append((chord, velocity))
 
     def remove_active_chord(self, target_chord):
+        """
+        Removes target_chord from the list of active chords.
+        Returns True if that's the playing chord (top of the stack), false otherwise.
+        """
         # Use a filter to remove target chord (ie. keep chords that aren't the target)
+        playing_chord = self.get_active_chord()
         self._active_chord_stack = \
             [item for item in self._active_chord_stack if item[0] is not target_chord]
 
+        if self.get_active_chord() is not playing_chord:
+            return True
+        return False
+
+
     def is_active_chord_list_empty(self):
         return len(self._active_chord_stack) == 0
+
+    def num_active_chords(self):
+        return len(self._active_chord_stack)
 
     def color_wipe(self):
         self.push.pads.set_all_pads_to_black()
@@ -259,8 +272,10 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
         pad.on_release(app.push)
         if pad.get_chord() is not None:
             if not app.is_active_chord_list_empty():
-                app.remove_active_chord(pad.get_chord())
-                should_play_chord = True
+                if app.remove_active_chord(pad.get_chord()):
+                    # The playing chord was removed
+                    should_play_chord = True
+
             else:
                 print("Warning: tried to remove chord from empty stack. This is likely because the pad was pressed before push was ready.")
 
@@ -276,22 +291,8 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
                 app.modifiers.remove(mod)
                 modifier_changed = True
     
-    if should_play_chord:
-        app.play_active_chord()
-
-        # Highlight related pads through the Registry
-        modded_chord = app.compute_modded_chord()
-        if previous_modded_chord:
-            # Clear previous pads
-            for rid in rids_from_chord(previous_modded_chord):
-                app.registry[rid].registry_release_highlight(app.push)
-
-        if modded_chord:
-            # Highlight new pads
-            for rid in rids_from_chord(modded_chord):
-                app.registry[rid].registry_highlight(app.push)
-
-    elif should_release_notes:
+    if should_release_notes:
+        # should release all notes if the last active chord was released
         app.send_note_offs()
 
         # Release highlight related pads through the Registry
@@ -307,6 +308,22 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
             # Highlight new pads
             for rid in rids_from_chord(chord):
                 app.registry[rid].registry_release_highlight(app.push)
+
+    elif should_play_chord:
+        # Should only play a chord if the currently playing chord was released
+        app.play_active_chord()
+
+        # Highlight related pads through the Registry
+        modded_chord = app.compute_modded_chord()
+        if previous_modded_chord:
+            # Clear previous pads
+            for rid in rids_from_chord(previous_modded_chord):
+                app.registry[rid].registry_release_highlight(app.push)
+
+        if modded_chord:
+            # Highlight new pads
+            for rid in rids_from_chord(modded_chord):
+                app.registry[rid].registry_highlight(app.push)
 
     elif modifier_changed:
         # replay the chord if the modifier changed

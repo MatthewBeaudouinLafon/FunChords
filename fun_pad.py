@@ -1,9 +1,11 @@
 from typing import Tuple, List, Type
 import copy
+import threading
 
 import note_util
 from fun_chord import FunChord
 from chord_mod import FunMod, mod_color_map, Sus2, Sus4
+from push2_python import constants
 
 class FunPad(object):
     """
@@ -175,8 +177,14 @@ class BankPad(FunPad):
     def __init__(self, pad_ij: Tuple[int]):
         self.recording_tap = False
 
+        # Harmony
         self.chord = None
         self.modifiers = None
+
+        # Hold interaction
+        self.hold_time = 0.75  # how long the user needs to hold before
+        self.active_thread = False
+        self.was_held_long_enough = None
 
         super(BankPad, self).__init__(pad_ij)
 
@@ -187,12 +195,31 @@ class BankPad(FunPad):
 
     def on_press(self, push, chord, modifiers):
         super(BankPad, self).on_press(push)
+        push.pads.set_pad_color(self.pad_ij, 'green', animation=constants.ANIMATION_BLINKING_QUARTER)
 
-        self.recording_tap = False
-        if chord is not None:
-            self.recording_tap = True
-            self.chord = chord
-            self.modifiers = copy.deepcopy(modifiers)
+        thread_pad_ij = self.pad_ij  # make sure closured variable doesn't change
+        def long_hold():
+            self.recording_tap = False
+            if chord is not None:
+                self.recording_tap = True
+                self.chord = chord
+                self.modifiers = copy.deepcopy(modifiers)
+
+            self.was_held_long_enough = True
+            push.pads.set_pad_color(thread_pad_ij, 'red', animation=constants.ANIMATION_BLINKING_8TH)
+            self.active_thread = None
+
+        self.active_thread = threading.Timer(1.0, long_hold)
+        self.was_held_long_enough = False
+        self.active_thread.start()
+
+    def on_release(self, push):
+        super(BankPad, self).on_release(push)
+
+        if self.active_thread is not None:
+            self.active_thread.cancel()
+
+        self.was_held_long_enough = None
 
     def default_color(self):
         if self.chord is None:
