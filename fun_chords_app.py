@@ -1,12 +1,13 @@
 import time
 import numpy as np
+from typing import List, Tuple
 
 import push2_python
 import mido
 import push2_python.constants
 
 from fun_chord import FunChord
-from fun_pad import PadRegistry, ChordPad, ModPad, BankPad, PianoNotePad
+from fun_pad import PadRegistry, ChordPad, ModPad, BankPad, PianoNotePad, FunPad
 from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
 
@@ -38,11 +39,14 @@ class FunChordApp(object):
         # self.active_scale_name = 'Dmin'
         # self.active_scale_name = 'Emin'
         self.active_scale_name = 'Cmaj'
-        self._active_chord_stack = []  # List of (chord, velocity_when_played). Use related methods.
-        self.modifiers = []
+        self.modifiers = []  # TODO: merge functionality with _active_pad_stack?
+        
+        # TODO: next time I change this, I'm refactoring it into its own class.
+        # List of (pad, velocity_when_played). Use related methods.
+        self._active_pad_stack: List[Tuple[FunPad, int]] = []
 
         # midi note that the chord voicing will move towards
-        self.voicing_center = note_util.name_to_midi('C2')
+        self.voicing_center = note_util.name_to_midi('C3')
 
         self.note_ons = set()  # set of note-ons sent.
 
@@ -63,40 +67,65 @@ class FunChordApp(object):
 
         self.init_colors()
 
-    def get_active_chord(self):
-        if not self.is_active_chord_list_empty():
-            return self._active_chord_stack[-1][0]  # [(chord, velocity), ...]
+    def get_active_chord(self) -> FunChord:
+        # Find the last pad that has a chord.
+        for pad, _ in self._active_pad_stack[::-1]:
+            chord = pad.get_chord()
+            if chord is not None:
+                return chord
         return None
 
-    def get_active_chord_velocity(self):
-        # TODO: if more properties are needed, just make this 'get active chord props'
-        if not self.is_active_chord_list_empty():
-            return self._active_chord_stack[-1][1]  # [(chord, velocity), ...]
+    def get_active_chord_velocity(self) -> int:
+        # Find the last pad that has a chord, that's the velocity we care about.
+        for pad, velocity in self._active_pad_stack[::-1]:
+            chord = pad.get_chord()
+            if chord is not None:
+                return velocity
         return None
 
-    def append_active_chord(self, chord, velocity):
-        self._active_chord_stack.append((chord, velocity))
+    # def append_active_chord(self, chord, velocity):
+    def append_active_pad(self, pad: FunPad, velocity: int):
+        self._active_pad_stack.append((pad, velocity))
 
-    def remove_active_chord(self, target_chord):
+    # def remove_active_chord(self, target_chord):
+    def remove_active_pad(self, target_pad):
         """
         Removes target_chord from the list of active chords.
         Returns True if that's the playing chord (top of the stack), false otherwise.
         """
-        # Use a filter to remove target chord (ie. keep chords that aren't the target)
-        playing_chord = self.get_active_chord()
-        self._active_chord_stack = \
-            [item for item in self._active_chord_stack if item[0] is not target_chord]
+        if len(self._active_pad_stack) == 0:
+            print("Warning: tried to remove chord from empty stack. This is likely because the pad was pressed before push was ready.")
+            return False            
 
-        if self.get_active_chord() is not playing_chord:
-            return True
+        active_chord_seen = False  # active chord is the last chord-pad (ChordPad or BankPad)
+        idx = len(self._active_pad_stack) - 1  # traverse backwards to catch active chord
+        for pad, _ in self._active_pad_stack[::-1]:
+            assert idx >= 0, "Index math is wrong!"
+            chord = pad.get_chord()
+
+            if pad is target_pad:
+                self._active_pad_stack.pop(idx)
+                if chord is not None and not active_chord_seen:
+                    # this is a chord pad and we haven't seen another before
+                    return True
+                return False
+            
+            if chord is not None:
+                active_chord_seen = True
+
+            idx -= 1
+
+        # Removed nothing
         return False
 
-
-    def is_active_chord_list_empty(self):
-        return len(self._active_chord_stack) == 0
-
-    def num_active_chords(self):
-        return len(self._active_chord_stack)
+    def has_active_chords(self) -> bool:
+        """
+        Returns whether there are chord pads in the active_pad_stack
+        """
+        for pad, _ in self._active_pad_stack[::-1]:
+            if pad.get_chord() is not None:
+                return True
+        return False
 
     def color_wipe(self):
         self.push.pads.set_all_pads_to_black()
@@ -180,7 +209,9 @@ class FunChordApp(object):
         self.push.pads.set_all_pads_to_black()
         self.push.buttons.set_all_buttons_color('black')
         self.push.f_stop.set()
+        print("Push2Python ended.")
         self.midi_out_port.close()
+        print("MIDI port closed.")
 
 @push2_python.on_button_pressed()
 def on_button_pressed(_, button_name):
@@ -223,6 +254,8 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
 
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
+        app.append_active_pad(pad, velocity)
+
         # Handle chord bank pads
         if type(pad) is BankPad:
             pad.on_press(app.push, app.get_active_chord(), app.modifiers)
@@ -231,7 +264,6 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
 
         # Handle chords pads
         if pad.get_chord() is not None:
-            app.append_active_chord(pad.get_chord(), velocity)
             should_play_chord = True
 
         # Handle modifier pads
@@ -243,6 +275,7 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
                 app.modifiers.append(mod)
                 should_play_chord = True
 
+    # Handle highlights and midi accordingly
     if should_play_chord:
         app.play_active_chord()
 
@@ -270,17 +303,12 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
     if pad:        
         # Handle chords pads
         pad.on_release(app.push)
-        if pad.get_chord() is not None:
-            if not app.is_active_chord_list_empty():
-                if app.remove_active_chord(pad.get_chord()):
-                    # The playing chord was removed
-                    should_play_chord = True
+        if app.remove_active_pad(pad):
+            # The playing chord was removed
+            should_play_chord = True
 
-            else:
-                print("Warning: tried to remove chord from empty stack. This is likely because the pad was pressed before push was ready.")
-
-            if app.is_active_chord_list_empty():
-                should_release_notes = True
+        if pad.get_chord() is not None and not app.has_active_chords():
+            should_release_notes = True
 
         # Handle modifier pads
         get_mod = pad.get_modifier()
@@ -291,6 +319,8 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
                 app.modifiers.remove(mod)
                 modifier_changed = True
     
+    # Handle highlights and midi accordingly
+    # NOTE: We always release chord pads, but they may be played immediately after
     if should_release_notes:
         # should release all notes if the last active chord was released
         app.send_note_offs()
@@ -309,7 +339,7 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
             for rid in rids_from_chord(chord):
                 app.registry[rid].registry_release_highlight(app.push)
 
-    elif should_play_chord:
+    if should_play_chord:
         # Should only play a chord if the currently playing chord was released
         app.play_active_chord()
 

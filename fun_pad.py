@@ -175,7 +175,6 @@ class BankPad(FunPad):
     Stores a chord and modifiers.
     """
     def __init__(self, pad_ij: Tuple[int]):
-        self.recording_tap = False
 
         # Harmony
         self.chord = None
@@ -195,23 +194,27 @@ class BankPad(FunPad):
 
     def on_press(self, push, chord, modifiers):
         super(BankPad, self).on_press(push)
-        push.pads.set_pad_color(self.pad_ij, 'green', animation=constants.ANIMATION_BLINKING_QUARTER)
 
-        thread_pad_ij = self.pad_ij  # make sure closured variable doesn't change
-        def long_hold():
-            self.recording_tap = False
-            if chord is not None:
-                self.recording_tap = True
-                self.chord = chord
-                self.modifiers = copy.deepcopy(modifiers)
+        # TODO before merge: not sending note offs in some cases?
+        # TODO: figure out how to update chords, when we do the flashy dance
+        # TODO: figure out behavior when no other chord is pressed.
+        # TODO: figure out unset bankpad lights
+        print(chord, self.chord)
+        if self.chord is None:
+            push.pads.set_pad_color(self.pad_ij, 'green', animation=constants.ANIMATION_BLINKING_QUARTER)
+            thread_pad_ij = self.pad_ij  # make sure closured variable doesn't change
+            thread_chord = chord
+            thread_modifiers = modifiers
+            def long_hold():
+                self.chord = thread_chord
+                self.modifiers = copy.deepcopy(thread_modifiers)
 
-            self.was_held_long_enough = True
-            push.pads.set_pad_color(thread_pad_ij, 'red', animation=constants.ANIMATION_BLINKING_8TH)
-            self.active_thread = None
+                push.pads.set_pad_color(thread_pad_ij, 'yellow')
+                push.pads.set_pad_color(thread_pad_ij, 'red', animation=constants.ANIMATION_BLINKING_8TH)
+                self.active_thread = None
 
-        self.active_thread = threading.Timer(1.0, long_hold)
-        self.was_held_long_enough = False
-        self.active_thread.start()
+            self.active_thread = threading.Timer(1.0, long_hold)
+            self.active_thread.start()
 
     def on_release(self, push):
         super(BankPad, self).on_release(push)
@@ -219,7 +222,11 @@ class BankPad(FunPad):
         if self.active_thread is not None:
             self.active_thread.cancel()
 
-        self.was_held_long_enough = None
+    def press_color(self):
+        if self.chord is None:
+            return self.default_color()
+        else:
+            return super(BankPad, self).press_color()
 
     def default_color(self):
         if self.chord is None:
@@ -229,14 +236,14 @@ class BankPad(FunPad):
 
     def get_chord(self) -> FunChord:
         # Don't return chord if we just recorded the pad
-        if self.recording_tap:
+        if self.chord is None:
             return None
 
         return self.chord
 
     def get_modifier(self) -> List[FunMod]:
         # Don't return chord if we just recorded the pad
-        if self.recording_tap:
+        if self.chord is None:
             return None
 
         return self.modifiers

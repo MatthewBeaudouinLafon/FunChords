@@ -246,7 +246,7 @@ class FunChord(object):
             voicing_center,
             voicing_range=1,
             bass_note=True,
-            voicing_type=VoicingType.GUITAR
+            voicing_type=VoicingType.WRAP
         )
 
 if __name__ == "__main__":
