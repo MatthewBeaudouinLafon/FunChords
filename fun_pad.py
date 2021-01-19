@@ -98,6 +98,12 @@ class FunPad(object):
         """
         return []
 
+    def delete(self) -> None:
+        """
+        Up to the pad to determine what this means.
+        Eg. Bank pads will clear themselves.
+        """
+        pass
 
 class PianoNotePad(FunPad):
     def __init__(self, pad_ij, tone):
@@ -188,35 +194,39 @@ class BankPad(FunPad):
         self.modifiers = None
 
         super(BankPad, self).__init__(pad_ij)
+    
+    def is_empty(self) -> bool:
+        return self.chord is None and self.modifiers is None
 
     def set_registry_id(self):
         # TODO: maybe have the registry update based on what's stored in the chord
         # such that playing the chord+mods stored lights this up.
         return None
 
-    def on_press(self, push, chord, modifiers, is_recording):
+    def on_press(self, push, chord, modifiers, is_recording, is_delete_held):
         # Returns whether the value was successfully changed
         super(BankPad, self).on_press(push)
 
-        if is_recording:
+        if is_delete_held:
+            self.chord = None
+            self.modifiers = None
+
+        # TODO?: Could also store modifiers in the bank?
+        elif self.is_empty() and chord:
             self.chord = chord
             self.modifiers = copy.deepcopy(modifiers)
-            return True
-
-        return False
-        # TODO: else: blink rec button?
 
     def on_release(self, push):
         super(BankPad, self).on_release(push)
 
     def press_color(self):
-        if self.chord is None:
-            return self.default_color()
+        if self.is_empty():
+            return 'orange'
         else:
             return super(BankPad, self).press_color()
 
     def default_color(self):
-        if self.chord is None:
+        if self.is_empty():
             return 'blue'
         else:
             return 'yellow'
@@ -226,6 +236,10 @@ class BankPad(FunPad):
 
     def get_modifier(self) -> List[FunMod]:
         return self.modifiers
+
+    def delete(self):
+        self.chord = None
+        self.modifiers = None
 
 
 ##################################################

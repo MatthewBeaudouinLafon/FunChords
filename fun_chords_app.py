@@ -44,6 +44,7 @@ class FunChordApp(object):
 
         # Recording chords
         self.is_recording = False
+        self.delete_held = False  # TODO: really should be a button handler thing
         
         # TODO: next time I change this, I'm refactoring it into its own class.
         # List of (pad, velocity_when_played). Use related methods.
@@ -160,9 +161,11 @@ class FunChordApp(object):
                     self.push.pads.set_pad_color((i,j), color='black')
 
         # Set button colors to white
-        self.push.buttons.set_button_color(push2_python.constants.BUTTON_STOP)
-        self.push.buttons.set_button_color(push2_python.constants.BUTTON_SETUP)
-        self.push.buttons.set_button_color(push2_python.constants.BUTTON_RECORD)
+        for button in (push2_python.constants.BUTTON_STOP,
+                        push2_python.constants.BUTTON_SETUP,
+                        push2_python.constants.BUTTON_RECORD,
+                        push2_python.constants.BUTTON_DELETE):
+            self.push.buttons.set_button_color(button)
 
     def init_push(self):
         return push2_python.Push2(use_user_midi_port=True)
@@ -232,6 +235,7 @@ class FunChordApp(object):
         self.midi_out_port.close()
         print("MIDI port closed.")
 
+# TODO: these two functions should really should refactor this into a button handler class
 @push2_python.on_button_pressed()
 def on_button_pressed(_, button_name):
     if button_name in (push2_python.constants.BUTTON_STOP):
@@ -239,9 +243,12 @@ def on_button_pressed(_, button_name):
         app.push.buttons.set_button_color(button_name, 'red')
         
     # TODO: should be part of the button handling magic
-    if button_name == push2_python.constants.BUTTON_RECORD:
+    elif button_name == push2_python.constants.BUTTON_RECORD:
         if not app.is_recording:
             app.push.buttons.set_button_color(button_name, 'light_gray')
+
+    elif button_name == push2_python.constants.BUTTON_DELETE:
+        app.delete_held = True
 
     else:
         # Set pressed button color to white
@@ -252,20 +259,20 @@ def on_button_released(_, button_name):
     # Set released button color to black (off)
     if button_name == push2_python.constants.BUTTON_STOP:
         app.stop_loop()
-        # app.push.buttons.set_button_color(button_name, 'white')
 
     elif button_name == push2_python.constants.BUTTON_USER:
         app.color_wipe()
         app.init_colors()
-        # app.push.buttons.set_button_color(button_name, 'white')
 
     elif button_name == push2_python.constants.BUTTON_SETUP:
         app.color_wipe()
         app.init_colors()
-        # app.push.buttons.set_button_color(button_name, 'white')
 
     elif button_name == push2_python.constants.BUTTON_RECORD:
         app.toggle_record()
+
+    elif button_name == push2_python.constants.BUTTON_DELETE:
+        app.delete_held = False
 
     else:
         app.push.buttons.set_button_color(button_name, 'black')
@@ -280,11 +287,10 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
     if pad:
         app.append_active_pad(pad, velocity)
 
+        # TODO: refactor app to have Model class, pass state into pad regardless instead of this cherry picked garbage.
         # Handle chord bank pads
         if type(pad) is BankPad:
-            changed = pad.on_press(app.push, app.get_active_chord(), app.modifiers, app.is_recording)
-            if changed:
-                app.set_recording_off()
+            pad.on_press(app.push, app.get_active_chord(), app.modifiers, app.is_recording, app.delete_held)
         else:
             pad.on_press(app.push)
 
