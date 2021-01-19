@@ -16,31 +16,22 @@ class FunPad(object):
         # APIs
         self.pad_ij = pad_ij
         self.is_pressed = False
+        self.is_highlighted = False
         self._registry_id = self.set_registry_id()
 
     def __repr__(self):
         return str(type(self)) + " at " + str(self.pad_ij)
-
-    def highlight(self, push, color=None):
-        # NOTE: This function should only change the pad's color
-        if color is None:
-            color = self.press_color()
+    
+    def _change_color(self, push, color):
         push.pads.set_pad_color(self.pad_ij, color)
 
-    def release_highlight(self, push):
-        # NOTE: This function should only change the pad's color
-        push.pads.set_pad_color(self.pad_ij, self.release_color())
-
-    def registry_highlight(self, push):
-        """ Used by the Registry to safely highlight the pad. """
-        self.highlight(push, self.ghost_color())
-    
-    def registry_release_highlight(self, push):
-        """ Used by the Registry to safely release highlight on the pad. """
-        # Don't un-highlight a pad if it is pressed but something tries to un-highlight through
-        # the registry.
-        if not self.is_pressed:
-            self.release_highlight(push)
+    def _update_color(self, push):
+        if self.is_pressed:
+            self._change_color(push, self.press_color())
+        elif self.is_highlighted:
+            self._change_color(push, self.highlight_color())
+        else:
+            self._change_color(push, self.default_color())
 
     def on_press(self, push):
         """
@@ -48,7 +39,7 @@ class FunPad(object):
         it should call the super anyway.
         """
         self.is_pressed = True
-        self.highlight(push)
+        self._update_color(push)
     
     def on_release(self, push):
         """
@@ -56,7 +47,19 @@ class FunPad(object):
         it should call the super anyway.
         """
         self.is_pressed = False
-        self.release_highlight(push)
+        self._update_color(push)
+
+    def highlight(self, push):
+        """
+        Allows pad to be lit up differently through the Registry.
+        Eg. when Cmaj is played, notes C, E, and G are highlighted.
+        """
+        self.is_highlighted = True
+        self._update_color(push)
+
+    def release_highlight(self, push):
+        self.is_highlighted = False
+        self._update_color(push)
 
     def get_registry_id(self):
         return self._registry_id
@@ -71,7 +74,7 @@ class FunPad(object):
     def press_color(self):
         return 'green'
 
-    def ghost_color(self):
+    def highlight_color(self):
         return 'turquoise'
 
     def default_color(self):
@@ -79,9 +82,6 @@ class FunPad(object):
         Display color when not pressed. This should be overwritten.
         """
         raise NotImplementedError
-
-    def release_color(self):
-        return self.default_color()
 
     def get_note(self):
         return None
@@ -91,12 +91,6 @@ class FunPad(object):
 
     def get_modifier(self):
         return None
-
-    def get_highlight_pad_requests(self) -> str:
-        """
-        Get list of Registry IDs that should be lit up on button press and .
-        """
-        return []
 
     def delete(self) -> None:
         """
@@ -190,31 +184,31 @@ class BankPad(FunPad):
     def __init__(self, pad_ij: Tuple[int]):
 
         # Harmony
-        self.chord = None
-        self.modifiers = None
+        self.chord_pad = None
+        self.modifier_pads = []
 
         super(BankPad, self).__init__(pad_ij)
     
     def is_empty(self) -> bool:
-        return self.chord is None and self.modifiers is None
+        return self.chord_pad is None and len(self.modifier_pads) == 0
 
     def set_registry_id(self):
         # TODO: maybe have the registry update based on what's stored in the chord
         # such that playing the chord+mods stored lights this up.
         return None
 
-    def on_press(self, push, chord, modifiers, is_recording, is_delete_held):
+    def on_press(self, push, chord_pad, modifier_pads, is_recording, is_delete_held):
         # Returns whether the value was successfully changed
         super(BankPad, self).on_press(push)
 
         if is_delete_held:
-            self.chord = None
-            self.modifiers = None
+            self.chord_pad = None
+            self.modifier_pads = []
 
-        # TODO?: Could also store modifiers in the bank?
-        elif self.is_empty() and chord:
-            self.chord = chord
-            self.modifiers = copy.deepcopy(modifiers)
+        # TODO?: Could also store just modifiers in the bank? Need to think design, might need color
+        elif self.is_empty() and chord_pad:
+            self.chord_pad = chord_pad
+            self.modifier_pads = copy.deepcopy(modifier_pads)
 
     def on_release(self, push):
         super(BankPad, self).on_release(push)
@@ -232,14 +226,16 @@ class BankPad(FunPad):
             return 'yellow'
 
     def get_chord(self) -> FunChord:
-        return self.chord
+        if self.chord_pad is None:
+            return None
+        return self.chord_pad.get_chord()
 
     def get_modifier(self) -> List[FunMod]:
-        return self.modifiers
+        return [mod.get_modifier() for mod in self.modifier_pads]
 
     def delete(self):
-        self.chord = None
-        self.modifiers = None
+        self.chord_pad = None
+        self.modifier_pads = None
 
 
 ##################################################

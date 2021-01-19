@@ -9,7 +9,7 @@ import push2_python.constants
 
 from fun_chord import FunChord
 from fun_pad import PadRegistry, ChordPad, ModPad, BankPad, PianoNotePad, FunPad
-from chord_mod import Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
+from chord_mod import FunMod, Sus2, Sus4, Parallel, Add6, Add7, Add9, Add11
 import note_util
 
 def rids_from_chord(chord: FunChord):
@@ -50,6 +50,8 @@ class FunChordApp(object):
         # List of (pad, velocity_when_played). Use related methods.
         self._active_pad_stack: List[Tuple[FunPad, int]] = []
 
+        self.highlighted_rids: List[str] = []  # TODO: move to highlight handler?
+
         # midi note that the chord voicing will move towards
         self.voicing_center = note_util.name_to_midi('C3')
 
@@ -72,13 +74,40 @@ class FunChordApp(object):
 
         self.init_colors()
 
-    def get_active_chord(self) -> FunChord:
+    def get_active_pad(self) -> FunPad:
         # Find the last pad that has a chord.
         for pad, _ in self._active_pad_stack[::-1]:
             chord = pad.get_chord()
             if chord is not None:
-                return chord
+                return pad
         return None
+
+    def get_active_chord(self) -> FunChord:
+        active_pad = self.get_active_pad()
+        if active_pad is not None:
+            return active_pad.get_chord()
+
+    def get_active_modifier_pads(self) -> List[FunPad]:
+        mod_pads = []
+        for pad, _ in self._active_pad_stack:
+            if type(pad) is BankPad:
+                mod_pads += pad.modifier_pads
+            else:
+                mod = pad.get_modifier()
+                if mod is not None:
+                    mod_pads.append(pad)
+        return mod_pads
+    
+    def get_active_modifiers(self) -> List[FunMod]:
+        mods = []
+        for pad, _ in self._active_pad_stack:
+            if type(pad) is BankPad:
+                mods += pad.get_modifier()
+            else:
+                mod = pad.get_modifier()
+                if mod is not None:
+                    mods.append(mod)
+        return mods
 
     def get_active_chord_velocity(self) -> int:
         # Find the last pad that has a chord, that's the velocity we care about.
@@ -183,10 +212,32 @@ class FunChordApp(object):
         if chord is None:
             return None
 
-        for mod in self.modifiers:
+        modifiers = self.get_active_modifiers()
+        for mod in modifiers:
             chord = mod(chord)
 
         return chord
+    
+    def handle_highlights(self):
+        # Reset highlights
+        for rid in self.highlighted_rids:
+            app.registry[rid].release_highlight(self.push)
+        self.highlighted_rids = []
+
+        # Highlight note pads
+        modded_chord = self.compute_modded_chord()
+        if modded_chord is not None:
+            for rid in rids_from_chord(modded_chord):
+                app.registry[rid].highlight(self.push)
+                self.highlighted_rids.append(rid)
+
+        # Highlight pads stored in bank
+        active_pad = self.get_active_pad()
+        if type(active_pad) is BankPad:
+            for pad in [active_pad.chord_pad] + active_pad.modifier_pads:
+                rid = pad.get_registry_id()
+                app.registry[rid].highlight(self.push)
+                self.highlighted_rids.append(rid)
 
     def play_active_chord(self):
         """
@@ -281,8 +332,6 @@ def on_button_released(_, button_name):
 @push2_python.on_pad_pressed()
 def on_pad_pressed(_, pad_n, pad_ij, velocity):
     should_play_chord = False
-    previous_modded_chord = app.compute_modded_chord()
-
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:
         app.append_active_pad(pad, velocity)
@@ -290,7 +339,7 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
         # TODO: refactor app to have Model class, pass state into pad regardless instead of this cherry picked garbage.
         # Handle chord bank pads
         if type(pad) is BankPad:
-            pad.on_press(app.push, app.get_active_chord(), app.modifiers, app.is_recording, app.delete_held)
+            pad.on_press(app.push, app.get_active_pad(), app.get_active_modifier_pads(), app.is_recording, app.delete_held)
         else:
             pad.on_press(app.push)
 
@@ -310,19 +359,7 @@ def on_pad_pressed(_, pad_n, pad_ij, velocity):
     # Handle highlights and midi accordingly
     if should_play_chord:
         app.play_active_chord()
-
-        # Highlight related pads through the Registry
-        modded_chord = app.compute_modded_chord()
-        if previous_modded_chord:
-            # Clear previous pads
-            for rid in rids_from_chord(previous_modded_chord):
-                app.registry[rid].registry_release_highlight(app.push)
-
-        if modded_chord:
-            # Highlight new pads
-            for rid in rids_from_chord(modded_chord):
-                app.registry[rid].registry_highlight(app.push)
-
+        app.handle_highlights()
 
 # TODO: content of the pad callbacks should be in the app
 @push2_python.on_pad_released()
@@ -330,7 +367,6 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
     should_release_notes = False
     should_play_chord = False
     modifier_changed = False
-    previous_modded_chord = app.compute_modded_chord()
     pad = app.pads[pad_ij[0]][pad_ij[1]]
     if pad:        
         # Handle chords pads
@@ -357,53 +393,15 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
         # should release all notes if the last active chord was released
         app.send_note_offs()
 
-        # Release highlight related pads through the Registry
-        new_computed_chord = app.compute_modded_chord()
-        if previous_modded_chord:
-            chord = previous_modded_chord if new_computed_chord is None else new_computed_chord
-
-            # TODO: could probably be optimized to make fewer calls
-            # Release previous pads
-            # for rid in rids_from_chord(previous_modded_chord):
-            #     app.registry[rid].registry_release_highlight(app.push)
-
-            # Highlight new pads
-            for rid in rids_from_chord(chord):
-                app.registry[rid].registry_release_highlight(app.push)
-
     if should_play_chord:
         # Should only play a chord if the currently playing chord was released
         app.play_active_chord()
-
-        # Highlight related pads through the Registry
-        modded_chord = app.compute_modded_chord()
-        if previous_modded_chord:
-            # Clear previous pads
-            for rid in rids_from_chord(previous_modded_chord):
-                app.registry[rid].registry_release_highlight(app.push)
-
-        if modded_chord:
-            # Highlight new pads
-            for rid in rids_from_chord(modded_chord):
-                app.registry[rid].registry_highlight(app.push)
 
     elif modifier_changed:
         # replay the chord if the modifier changed
         app.play_active_chord()
 
-        # Highlight related pads through the Registry
-        new_computed_chord = app.compute_modded_chord()
-        if previous_modded_chord:
-            chord = previous_modded_chord if new_computed_chord is None else new_computed_chord
-
-            # TODO: could probably be optimized to make fewer calls
-            # Release previous pads
-            for rid in rids_from_chord(previous_modded_chord):
-                app.registry[rid].registry_release_highlight(app.push)
-
-            # Highlight new pads
-            for rid in rids_from_chord(chord):
-                app.registry[rid].registry_highlight(app.push)
+    app.handle_highlights()
 
 if __name__ == "__main__":
     app = FunChordApp()
