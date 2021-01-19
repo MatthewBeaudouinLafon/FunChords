@@ -21,9 +21,11 @@ class FunPad(object):
     def __repr__(self):
         return str(type(self)) + " at " + str(self.pad_ij)
 
-    def highlight(self, push):
+    def highlight(self, push, color=None):
         # NOTE: This function should only change the pad's color
-        push.pads.set_pad_color(self.pad_ij, self.press_color())
+        if color is None:
+            color = self.press_color()
+        push.pads.set_pad_color(self.pad_ij, color)
 
     def release_highlight(self, push):
         # NOTE: This function should only change the pad's color
@@ -31,7 +33,7 @@ class FunPad(object):
 
     def registry_highlight(self, push):
         """ Used by the Registry to safely highlight the pad. """
-        self.highlight(push)
+        self.highlight(push, self.ghost_color())
     
     def registry_release_highlight(self, push):
         """ Used by the Registry to safely release highlight on the pad. """
@@ -47,7 +49,7 @@ class FunPad(object):
         """
         self.is_pressed = True
         self.highlight(push)
-
+    
     def on_release(self, push):
         """
         What to do when the pad is released. If a pad overwrites this function to do extra stuff,
@@ -67,10 +69,15 @@ class FunPad(object):
         raise NotImplementedError
 
     def press_color(self):
-        # Default to green
         return 'green'
 
+    def ghost_color(self):
+        return 'turquoise'
+
     def default_color(self):
+        """
+        Display color when not pressed. This should be overwritten.
+        """
         raise NotImplementedError
 
     def release_color(self):
@@ -125,8 +132,8 @@ class ChordPad(FunPad):
         return 'Chord: ' + str(self.chord)
 
     def default_color(self):
-        tonic_color = 'turquoise'
-        subdominant_color = 'purple'
+        tonic_color = 'purple'
+        subdominant_color = 'pink'
         dominant_color = 'red'
         chord_root_degree = self.chord.root_degree()
         if self.chord.scale_quality == 'maj':
@@ -180,11 +187,6 @@ class BankPad(FunPad):
         self.chord = None
         self.modifiers = None
 
-        # Hold interaction
-        self.hold_time = 0.75  # how long the user needs to hold before
-        self.active_thread = False
-        self.was_held_long_enough = None
-
         super(BankPad, self).__init__(pad_ij)
 
     def set_registry_id(self):
@@ -192,35 +194,20 @@ class BankPad(FunPad):
         # such that playing the chord+mods stored lights this up.
         return None
 
-    def on_press(self, push, chord, modifiers):
+    def on_press(self, push, chord, modifiers, is_recording):
+        # Returns whether the value was successfully changed
         super(BankPad, self).on_press(push)
 
-        # TODO before merge: not sending note offs in some cases?
-        # TODO: figure out how to update chords, when we do the flashy dance
-        # TODO: figure out behavior when no other chord is pressed.
-        # TODO: figure out unset bankpad lights
-        print(chord, self.chord)
-        if self.chord is None:
-            push.pads.set_pad_color(self.pad_ij, 'green', animation=constants.ANIMATION_BLINKING_QUARTER)
-            thread_pad_ij = self.pad_ij  # make sure closured variable doesn't change
-            thread_chord = chord
-            thread_modifiers = modifiers
-            def long_hold():
-                self.chord = thread_chord
-                self.modifiers = copy.deepcopy(thread_modifiers)
+        if is_recording:
+            self.chord = chord
+            self.modifiers = copy.deepcopy(modifiers)
+            return True
 
-                push.pads.set_pad_color(thread_pad_ij, 'yellow')
-                push.pads.set_pad_color(thread_pad_ij, 'red', animation=constants.ANIMATION_BLINKING_8TH)
-                self.active_thread = None
-
-            self.active_thread = threading.Timer(1.0, long_hold)
-            self.active_thread.start()
+        return False
+        # TODO: else: blink rec button?
 
     def on_release(self, push):
         super(BankPad, self).on_release(push)
-
-        if self.active_thread is not None:
-            self.active_thread.cancel()
 
     def press_color(self):
         if self.chord is None:
@@ -235,17 +222,9 @@ class BankPad(FunPad):
             return 'yellow'
 
     def get_chord(self) -> FunChord:
-        # Don't return chord if we just recorded the pad
-        if self.chord is None:
-            return None
-
         return self.chord
 
     def get_modifier(self) -> List[FunMod]:
-        # Don't return chord if we just recorded the pad
-        if self.chord is None:
-            return None
-
         return self.modifiers
 
 
