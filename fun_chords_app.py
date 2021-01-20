@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from copy import deepcopy
 
 import push2_python
@@ -115,6 +115,15 @@ class FunChordApp(object):
             chord = pad.get_chord()
             if chord is not None:
                 return velocity
+        return None
+
+    def get_latest_active_pad_by_type(self, pad_type) -> Union[FunPad, type(None)]:
+        """
+        Get the last pad by type. Returns None if not found.
+        """
+        for pad, _ in self._active_pad_stack[::-1]:
+            if isinstance(pad, pad_type):
+                return pad
         return None
 
     def append_active_pad(self, pad: FunPad, velocity: int):
@@ -377,6 +386,12 @@ def on_pad_released(_, pad_n, pad_ij, velocity):
 
         if pad.get_chord() is not None and not app.has_active_chords():
             should_release_notes = True
+
+        if app.is_recording:
+            bankpad = app.get_latest_active_pad_by_type(BankPad)
+            if bankpad is not None and bankpad is not pad:
+                # if there's an active bank pad that's not the last pad
+                bankpad.update(pad)
 
         # Handle modifier pads
         get_mod = pad.get_modifier()

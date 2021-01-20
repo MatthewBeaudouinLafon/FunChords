@@ -236,7 +236,21 @@ class BankPad(FunPad):
     def delete(self):
         self.chord_pad = None
         self.modifier_pads = None
+    
+    def update(self, pad: FunPad):
+        """
+        Change stored pads. Replace ChordPad, toggle ModPads.
+        """
+        if type(pad) is ChordPad:
+            self.chord_pad = pad
+        elif type(pad) is ModPad:
+            for idx, local_mod_pad in enumerate(self.modifier_pads):
+                if pad.get_registry_id() == local_mod_pad.get_registry_id():
+                    self.modifier_pads.pop(idx)
+                    return
 
+            # If no pad is removed, add it
+            self.modifier_pads.append(pad)
 
 ##################################################
 #                    Registry                    #
